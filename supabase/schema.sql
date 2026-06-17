@@ -5,8 +5,10 @@
 -- Setup: connect Clerk as a third-party auth provider in Supabase, then run this.
 -- ============================================================================
 
-create or replace function auth.org_id() returns text
-language sql stable as $$
+create or replace function public.org_id() returns text
+language sql stable
+set search_path = ''
+as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true)::json ->> 'org_id', ''), '');
 $$;
 
@@ -42,10 +44,10 @@ create index if not exists leads_org_idx on public.leads (org_id);
 alter table public.sites enable row level security;
 alter table public.leads enable row level security;
 
-create policy "tenant reads its sites" on public.sites for select using (org_id = auth.org_id());
-create policy "tenant writes its sites" on public.sites for all using (org_id = auth.org_id()) with check (org_id = auth.org_id());
-create policy "tenant reads its leads" on public.leads for select using (org_id = auth.org_id());
-create policy "tenant writes its leads" on public.leads for all using (org_id = auth.org_id()) with check (org_id = auth.org_id());
+create policy "tenant reads its sites" on public.sites for select using (org_id = public.org_id());
+create policy "tenant writes its sites" on public.sites for all using (org_id = public.org_id()) with check (org_id = public.org_id());
+create policy "tenant reads its leads" on public.leads for select using (org_id = public.org_id());
+create policy "tenant writes its leads" on public.leads for all using (org_id = public.org_id()) with check (org_id = public.org_id());
 
 -- Public lead capture from a published site should go through a server route
 -- using the service-role key (bypasses RLS), stamping org_id server-side.
