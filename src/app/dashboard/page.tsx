@@ -4,7 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { OrgControls } from "./org-controls";
 import { WriteTestButton } from "./write-test-button";
 import { PendingIdea } from "./pending-idea";
-import { syncUser } from "@/lib/actions/sync-user";
+import { syncUser, reconcileUsers } from "@/lib/actions/sync-user";
 
 export const metadata = { title: "Integration test" };
 export const dynamic = "force-dynamic"; // always read fresh auth + DB
@@ -29,6 +29,9 @@ export default async function DashboardPage() {
   // (service-role upsert keyed by clerk_id). Without this the user exists in
   // Clerk but never lands in the database.
   await syncUser();
+  // Prune rows for users that were deleted in Clerk (delete-sync on localhost,
+  // where we can't receive a webhook). Keeps Supabase matching Clerk.
+  await reconcileUsers();
 
   const user = await currentUser();
   const claims = (sessionClaims ?? {}) as Record<string, unknown>;
