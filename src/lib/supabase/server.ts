@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 
 export async function getSupabaseServerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -8,28 +7,13 @@ export async function getSupabaseServerClient() {
   if (!url || !key) return null;
 
   const { getToken } = await auth();
-  const cookieStore = await cookies();
 
-  // Native Clerk Third-Party Auth: pass the Clerk session token per-request via
-  // accessToken (re-evaluated on every call, so it never goes stale) instead of
-  // pinning an Authorization header at client-creation time.
-  return createServerClient(url, key, {
+  // Native Clerk Third-Party Auth: a plain supabase-js client that pulls the
+  // Clerk session token per request via accessToken (re-evaluated each call, so
+  // it never goes stale). We deliberately do NOT use @supabase/ssr here — Clerk
+  // owns the session, and ssr's cookie-based Supabase Auth sync is incompatible
+  // with the accessToken option (it throws on onAuthStateChange).
+  return createClient(url, key, {
     accessToken: async () => (await getToken()) ?? null,
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(
-        cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[],
-      ) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options as never),
-          );
-        } catch {
-          // Called from a Server Component — middleware refreshes the session.
-        }
-      },
-    },
   });
 }
