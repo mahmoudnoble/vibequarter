@@ -12,12 +12,18 @@ export type TestResult = { ok: boolean; message: string; detail?: string };
  * passes — i.e. the whole bridge works.
  */
 export async function runWriteTest(): Promise<TestResult> {
-  const { orgId } = await auth();
+  // Stamp the row with the SAME value RLS reads — the custom org_id session
+  // claim that public.org_id() pulls from request.jwt.claims — so the inserted
+  // org_id matches the WITH CHECK. (Clerk's native auth().orgId comes from the
+  // separate `o` claim and may differ/be absent.)
+  const { sessionClaims } = await auth();
+  const claims = (sessionClaims ?? {}) as Record<string, unknown>;
+  const orgId = typeof claims.org_id === "string" && claims.org_id.length > 0 ? claims.org_id : null;
   if (!orgId) {
     return {
       ok: false,
       message:
-        "No active organization. RLS scopes rows by org, so pick/create one in the switcher above, then retry.",
+        "No org_id in your token. Pick/create an organization in the switcher above, then retry.",
     };
   }
 
