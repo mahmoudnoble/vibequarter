@@ -148,26 +148,6 @@ const en = {
     custom: "Custom",
     billing: { monthly: "Monthly", yearly: "Yearly", save: "Save 20%" },
     billedAnnually: "billed annually",
-    plans: [
-      {
-        id: "starter", name: "Starter", price: "$0", priceYearly: "$0", cadence: "forever",
-        blurb: "Launch a one-page site and feel the magic.",
-        cta: "Build free", featured: false,
-        features: ["1 AI-built site", "vibequarter.site subdomain", "Lead capture form", "Arabic + English"],
-      },
-      {
-        id: "pro", name: "Pro", price: "$20", priceYearly: "$16", cadence: "/mo",
-        blurb: "Everything a single business needs to win clients.",
-        cta: "Start 14-day trial", featured: true,
-        features: ["Unlimited pages", "Custom domain + SSL", "AI WhatsApp booking", "SEO + GEO toolkit", "Remove VibeQuarter badge", "Priority support"],
-      },
-      {
-        id: "dfy", name: "Done-for-you", price: "Custom", priceYearly: "Custom", cadence: "",
-        blurb: "We design, build and automate it for you — end to end.",
-        cta: "Book a call", featured: false,
-        features: ["Custom design & build", "AI WhatsApp + patient management", "Migration & launch", "SEO/AEO retainer", "Dedicated team"],
-      },
-    ],
   },
   why: {
     eyebrow: "WHY VIBEQUARTER",
@@ -366,26 +346,6 @@ const ar: typeof en = {
     custom: "حسب الطلب",
     billing: { monthly: "شهري", yearly: "سنوي", save: "وفّر ٢٠٪" },
     billedAnnually: "يُدفع سنوياً",
-    plans: [
-      {
-        id: "starter", name: "المبتدئة", price: "٠ $", priceYearly: "٠ $", cadence: "للأبد",
-        blurb: "أطلق موقعاً من صفحة واحدة واكتشف الفارق.",
-        cta: "ابدأ مجاناً", featured: false,
-        features: ["موقع واحد بالذكاء الاصطناعي", "نطاق فرعي vibequarter.site", "نموذج التقاط العملاء", "عربي + إنجليزي"],
-      },
-      {
-        id: "pro", name: "الاحترافية", price: "٢٠ $", priceYearly: "١٦ $", cadence: "/شهرياً",
-        blurb: "كل ما يحتاجه نشاطٌ واحد لكسب العملاء.",
-        cta: "تجربة ١٤ يوماً", featured: true,
-        features: ["صفحات غير محدودة", "نطاق مخصّص + SSL", "حجز عبر واتساب بالذكاء الاصطناعي", "أدوات SEO و GEO", "إزالة شعار VibeQuarter", "دعمٌ ذو أولوية"],
-      },
-      {
-        id: "dfy", name: "نُنجزها لك", price: "حسب الطلب", priceYearly: "حسب الطلب", cadence: "",
-        blurb: "نُصمّم ونبني ونُؤتمت كل شيء لك — من البداية إلى النهاية.",
-        cta: "احجز مكالمة", featured: false,
-        features: ["تصميم وبناء مخصّص", "واتساب بالذكاء الاصطناعي + إدارة المرضى", "ترحيل وإطلاق", "اشتراك SEO/AEO", "فريقٌ مخصّص"],
-      },
-    ],
   },
   why: {
     eyebrow: "لماذا VibeQuarter",

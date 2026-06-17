@@ -84,3 +84,35 @@ create policy "user reads own record" on public.users
       nullif(current_setting('request.jwt.claims', true)::json ->> 'sub', ''), ''
     )
   );
+
+-- ============================================================================
+-- Plans — pricing tiers managed by a super-admin (see /admin/plans). Public can
+-- read ACTIVE plans (pricing page); writes go through super-admin-gated server
+-- actions using the service-role key (no client write policy). type drives the
+-- account model: 'personal' = owner_id is the user; 'organization' = a team.
+-- ============================================================================
+
+create table if not exists public.plans (
+  id            uuid primary key default gen_random_uuid(),
+  slug          text not null unique,
+  type          text not null check (type in ('personal','organization')),
+  max_members   int not null default 1,
+  price_monthly numeric,
+  price_yearly  numeric,
+  currency      text not null default 'USD',
+  name          jsonb not null,                                  -- { "en": ..., "ar": ... }
+  blurb         jsonb not null,
+  features      jsonb not null default '{"en":[],"ar":[]}'::jsonb,
+  cta           jsonb not null,
+  price_label   jsonb,                                           -- shown when price is null (e.g. "Custom")
+  cta_action    text not null default 'signup' check (cta_action in ('signup','contact')),
+  featured      boolean not null default false,
+  is_active     boolean not null default true,
+  sort_order    int not null default 0,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table public.plans enable row level security;
+
+create policy "anyone reads active plans" on public.plans for select using (is_active = true);

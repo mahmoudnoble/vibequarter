@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { OrgControls } from "./org-controls";
 import { WriteTestButton } from "./write-test-button";
 import { PendingIdea } from "./pending-idea";
+import { PlanOnboarding } from "./plan-onboarding";
 import { syncUser, reconcileUsers } from "@/lib/actions/sync-user";
 
 export const metadata = { title: "Integration test" };
@@ -72,6 +73,8 @@ export default async function DashboardPage() {
         </div>
         <OrgControls />
       </div>
+
+      <PlanOnboarding />
 
       <PendingIdea />
 

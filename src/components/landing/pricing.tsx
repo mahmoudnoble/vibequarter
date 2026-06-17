@@ -11,11 +11,12 @@ import { Icon } from "@/components/ui/icon";
 import { buttonClasses } from "@/components/ui/button";
 import { useLanguage } from "@/components/i18n/language-provider";
 import { cn } from "@/lib/utils";
+import type { Plan } from "@/lib/plans";
 
-const planIcon: Record<string, string> = { starter: "Sparkles", pro: "Zap", dfy: "Rocket" };
+const planIcon: Record<string, string> = { starter: "Sparkles", pro: "Zap", team: "Users", dfy: "Rocket" };
 
-export function Pricing() {
-  const { t } = useLanguage();
+export function Pricing({ plans }: { plans: Plan[] }) {
+  const { t, locale } = useLanguage();
   const p = t.pricing;
   const [yearly, setYearly] = useState(false);
 
@@ -62,14 +63,37 @@ export function Pricing() {
         </Reveal>
       </div>
 
-      <div className="mt-12 grid items-stretch gap-5 lg:grid-cols-3">
-        {p.plans.map((plan, i) => {
-          const price = yearly ? plan.priceYearly : plan.price;
-          const showCadence = plan.cadence && plan.id !== "dfy";
-          // Free + paid trial → sign up. "Done-for-you" is a sales call, left as-is.
-          const ctaHref = plan.id === "dfy" ? "#top" : "/sign-up";
+      <div
+        className={cn(
+          "mt-12 grid items-stretch gap-5 sm:grid-cols-2",
+          plans.length % 4 === 0 ? "lg:grid-cols-4" : plans.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2",
+        )}
+      >
+        {plans.map((plan, i) => {
+          const priceValue = yearly ? plan.price_yearly : plan.price_monthly;
+          const priceDisplay = plan.price_label ? plan.price_label[locale] : `$${priceValue ?? 0}`;
+          const showCadence = plan.price_label == null && (priceValue ?? 0) > 0;
+          const subLine =
+            plan.price_label == null && (priceValue ?? 0) === 0
+              ? p.forever
+              : yearly && plan.price_yearly != null && (priceValue ?? 0) > 0
+                ? p.billedAnnually
+                : "";
+
+          const isSignup = plan.cta_action === "signup";
+          const href = isSignup ? "/sign-up" : "#top";
+          const onCtaClick = isSignup
+            ? () => {
+                try {
+                  localStorage.setItem("vq-plan", plan.slug);
+                } catch {
+                  /* ignore */
+                }
+              }
+            : undefined;
+
           return (
-            <Reveal key={plan.id} variant="up" delay={i * 0.08} className={cn("h-full", plan.featured && "lg:-my-4")}>
+            <Reveal key={plan.slug} variant="up" delay={i * 0.08} className={cn("h-full", plan.featured && "lg:-my-4")}>
               <div
                 className={cn(
                   "relative flex h-full flex-col overflow-hidden rounded-2xl p-7",
@@ -86,36 +110,39 @@ export function Pricing() {
 
                 <div className="flex items-center gap-2.5">
                   <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl bg-jade-500/15", plan.featured ? "text-jade-600" : "text-jade-300")}>
-                    <Icon name={planIcon[plan.id] ?? "Sparkles"} className="h-[18px] w-[18px]" />
+                    <Icon name={planIcon[plan.slug] ?? "Sparkles"} className="h-[18px] w-[18px]" />
                   </span>
-                  <h3 className={cn("font-display text-lg font-bold", plan.featured ? "text-ink-900" : "text-white")}>{plan.name}</h3>
+                  <h3 className={cn("font-display text-lg font-bold", plan.featured ? "text-ink-900" : "text-white")}>{plan.name[locale]}</h3>
+                  {plan.type === "organization" && (
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", plan.featured ? "bg-ink-900/10 text-ink-600" : "bg-white/10 text-ink-300")}>
+                      {plan.max_members} {locale === "ar" ? "أعضاء" : "seats"}
+                    </span>
+                  )}
                 </div>
 
                 <div className="mt-5 flex items-end gap-1">
                   <AnimatePresence mode="popLayout" initial={false}>
                     <motion.span
-                      key={price}
+                      key={priceDisplay}
                       initial={{ y: 10, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       exit={{ y: -10, opacity: 0 }}
                       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                       className="font-display text-4xl font-bold tracking-tight"
                     >
-                      {price}
+                      {priceDisplay}
                     </motion.span>
                   </AnimatePresence>
-                  {showCadence && <span className={cn("pb-1 text-sm", plan.featured ? "text-ink-500" : "text-ink-400")}>{plan.cadence}</span>}
+                  {showCadence && <span className={cn("pb-1 text-sm", plan.featured ? "text-ink-500" : "text-ink-400")}>{p.perMonth}</span>}
                 </div>
-                <div className={cn("mt-1 h-4 text-[11px]", plan.featured ? "text-ink-500" : "text-ink-400")}>
-                  {yearly && plan.id === "pro" ? p.billedAnnually : plan.id === "starter" ? p.forever : ""}
-                </div>
+                <div className={cn("mt-1 h-4 text-[11px]", plan.featured ? "text-ink-500" : "text-ink-400")}>{subLine}</div>
 
-                <p className={cn("mt-3 text-sm leading-relaxed", plan.featured ? "text-ink-600" : "text-ink-300")}>{plan.blurb}</p>
+                <p className={cn("mt-3 text-sm leading-relaxed", plan.featured ? "text-ink-600" : "text-ink-300")}>{plan.blurb[locale]}</p>
 
                 <div className={cn("my-6 h-px", plan.featured ? "bg-ink-100" : "bg-white/10")} />
 
                 <ul className="space-y-3">
-                  {plan.features.map((ft, k) => (
+                  {(plan.features[locale] ?? []).map((ft, k) => (
                     <li key={k} className="flex items-start gap-2.5 text-sm">
                       <span className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-jade-500/15", plan.featured ? "text-jade-600" : "text-jade-300")}>
                         <Icon name="Check" className="h-3.5 w-3.5" strokeWidth={2.6} />
@@ -128,14 +155,18 @@ export function Pricing() {
                 <div className="mt-auto pt-7">
                   {plan.featured ? (
                     <Magnetic className="w-full">
-                      <a href={ctaHref} className={buttonClasses({ size: "md", className: "w-full" })}>
-                        {plan.cta}
+                      <a href={href} onClick={onCtaClick} className={buttonClasses({ size: "md", className: "w-full" })}>
+                        {plan.cta[locale]}
                         <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
                       </a>
                     </Magnetic>
                   ) : (
-                    <a href={ctaHref} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 font-semibold text-white transition-colors hover:bg-white/10">
-                      {plan.cta}
+                    <a
+                      href={href}
+                      onClick={onCtaClick}
+                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 font-semibold text-white transition-colors hover:bg-white/10"
+                    >
+                      {plan.cta[locale]}
                       <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
                     </a>
                   )}

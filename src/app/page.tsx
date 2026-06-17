@@ -12,8 +12,10 @@ import { Why } from "@/components/landing/why";
 import { Blog } from "@/components/landing/blog";
 import { FinalCta } from "@/components/landing/final-cta";
 import { Footer } from "@/components/landing/footer";
+import { getActivePlans } from "@/lib/plans";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const plans = await getActivePlans();
   return (
     <>
       <Nav />
@@ -32,7 +34,7 @@ export default function HomePage() {
         <HowItWorks />
         <Features />
         <BeforeAfter />
-        <Pricing />
+        <Pricing plans={plans} />
         <Why />
         <Blog />
         <FinalCta />
