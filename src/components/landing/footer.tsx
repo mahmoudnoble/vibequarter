@@ -30,7 +30,10 @@ export function Footer() {
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((link, k) => (
                   <li key={k}>
-                    <a href="#" className="text-sm text-ink-300 transition-colors hover:text-white">
+                    <a
+                      href={link === t.nav.build ? "/sign-up" : "#"}
+                      className="text-sm text-ink-300 transition-colors hover:text-white"
+                    >
                       {link}
                     </a>
                   </li>

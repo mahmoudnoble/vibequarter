@@ -65,7 +65,7 @@ export function Nav() {
             >
               {t.nav.call}
             </a>
-            <a href="#top" className={cn(buttonClasses({ size: "sm" }), "hidden h-10 sm:inline-flex")}>
+            <a href="/sign-up" className={cn(buttonClasses({ size: "sm" }), "hidden h-10 sm:inline-flex")}>
               {t.nav.build}
               <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
             </a>
@@ -130,7 +130,7 @@ export function Nav() {
                 >
                   {t.nav.call}
                 </a>
-                <a href="#top" onClick={() => setOpen(false)} className={buttonClasses({ size: "md", className: "w-full" })}>
+                <a href="/sign-up" onClick={() => setOpen(false)} className={buttonClasses({ size: "md", className: "w-full" })}>
                   {t.nav.build}
                   <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
                 </a>

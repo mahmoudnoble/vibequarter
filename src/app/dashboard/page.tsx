@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { OrgControls } from "./org-controls";
 import { WriteTestButton } from "./write-test-button";
+import { PendingIdea } from "./pending-idea";
 
 export const metadata = { title: "Integration test" };
 export const dynamic = "force-dynamic"; // always read fresh auth + DB
@@ -55,6 +56,8 @@ export default async function DashboardPage() {
         </div>
         <OrgControls />
       </div>
+
+      <PendingIdea />
 
       <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <StatusRow ok={Boolean(userId)} label="Clerk auth" value={`Signed in as ${email} (${userId})`} />

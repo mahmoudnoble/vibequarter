@@ -66,6 +66,8 @@ export function Pricing() {
         {p.plans.map((plan, i) => {
           const price = yearly ? plan.priceYearly : plan.price;
           const showCadence = plan.cadence && plan.id !== "dfy";
+          // Free + paid trial → sign up. "Done-for-you" is a sales call, left as-is.
+          const ctaHref = plan.id === "dfy" ? "#top" : "/sign-up";
           return (
             <Reveal key={plan.id} variant="up" delay={i * 0.08} className={cn("h-full", plan.featured && "lg:-my-4")}>
               <div
@@ -126,13 +128,13 @@ export function Pricing() {
                 <div className="mt-auto pt-7">
                   {plan.featured ? (
                     <Magnetic className="w-full">
-                      <a href="#top" className={buttonClasses({ size: "md", className: "w-full" })}>
+                      <a href={ctaHref} className={buttonClasses({ size: "md", className: "w-full" })}>
                         {plan.cta}
                         <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
                       </a>
                     </Magnetic>
                   ) : (
-                    <a href="#top" className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 font-semibold text-white transition-colors hover:bg-white/10">
+                    <a href={ctaHref} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 font-semibold text-white transition-colors hover:bg-white/10">
                       {plan.cta}
                       <Icon name="ArrowRight" className="h-4 w-4 rtl:-scale-x-100" />
                     </a>

@@ -71,10 +71,9 @@ function HeroPrompt() {
       }
     }
     setSubmitting(true);
-    setTimeout(() => {
-      document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
-      setSubmitting(false);
-    }, 650);
+    // Carry the idea through the auth gate: sign up, then the dashboard picks
+    // up the saved prompt from localStorage (generation wires in later).
+    window.location.href = "/sign-up";
   };
 
   const showOverlay = !value && !focused;
@@ -261,7 +260,7 @@ export function Hero() {
           className="mt-7 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row"
         >
           <Magnetic className="w-full sm:w-auto">
-            <a href="#pricing" className={buttonClasses({ size: "lg", className: "w-full sm:w-auto" })}>
+            <a href="/sign-up" className={buttonClasses({ size: "lg", className: "w-full sm:w-auto" })}>
               {h.build}
               <Icon name="ArrowRight" className="h-[18px] w-[18px] rtl:-scale-x-100" />
             </a>

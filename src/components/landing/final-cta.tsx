@@ -41,7 +41,7 @@ export function FinalCta() {
 
         <Reveal variant="up" delay={0.25} className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Magnetic className="w-full sm:w-auto">
-            <a href="#top" className={buttonClasses({ size: "lg", className: "w-full sm:w-auto" })}>
+            <a href="/sign-up" className={buttonClasses({ size: "lg", className: "w-full sm:w-auto" })}>
               {f.build}
               <Icon name="ArrowRight" className="h-[18px] w-[18px] rtl:-scale-x-100" />
             </a>
