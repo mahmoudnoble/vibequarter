@@ -6,26 +6,17 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 export type TestResult = { ok: boolean; message: string; detail?: string };
 
 /**
- * The conclusive end-to-end check: insert a tenant-scoped row, then read it
- * back. This only succeeds if (a) Supabase accepts the Clerk token, (b) the
- * token carries org_id, and (c) the RLS WITH CHECK (org_id = public.org_id())
- * passes — i.e. the whole bridge works.
+ * End-to-end check: insert a row owned by the current tenant, then read it back.
+ * Hybrid tenancy — the owner is the active ORG (team plan) or the USER (sub,
+ * individual plan), which is exactly what RLS's current_tenant() compares the
+ * WITH CHECK against. Works whether or not the user is in an organization.
  */
 export async function runWriteTest(): Promise<TestResult> {
-  // Stamp the row with the SAME value RLS reads — the custom org_id session
-  // claim that public.org_id() pulls from request.jwt.claims — so the inserted
-  // org_id matches the WITH CHECK. (Clerk's native auth().orgId comes from the
-  // separate `o` claim and may differ/be absent.)
-  const { sessionClaims } = await auth();
+  const { userId, sessionClaims } = await auth();
   const claims = (sessionClaims ?? {}) as Record<string, unknown>;
   const orgId = typeof claims.org_id === "string" && claims.org_id.length > 0 ? claims.org_id : null;
-  if (!orgId) {
-    return {
-      ok: false,
-      message:
-        "No org_id in your token. Pick/create an organization in the switcher above, then retry.",
-    };
-  }
+  const owner = orgId ?? userId; // active org if any, else the individual user
+  if (!owner) return { ok: false, message: "You're not signed in." };
 
   const supabase = await getSupabaseServerClient();
   if (!supabase) return { ok: false, message: "Supabase env vars are not set." };
@@ -33,7 +24,7 @@ export async function runWriteTest(): Promise<TestResult> {
   const slug = `rls-test-${Date.now()}`;
   const { data, error } = await supabase
     .from("sites")
-    .insert({ org_id: orgId, name: "RLS test site", slug })
+    .insert({ owner_id: owner, name: "RLS test site", slug })
     .select()
     .single();
 
@@ -47,7 +38,7 @@ export async function runWriteTest(): Promise<TestResult> {
 
   return {
     ok: true,
-    message: "Inserted and read back a tenant-scoped row — the full Clerk → Supabase → RLS chain works.",
-    detail: `id=${data.id} · slug=${data.slug} · org_id=${data.org_id}`,
+    message: `Inserted and read back a row owned by ${orgId ? "your organization" : "you"} — the Clerk → Supabase → RLS chain works.`,
+    detail: `id=${data.id} · slug=${data.slug} · owner_id=${data.owner_id}`,
   };
 }

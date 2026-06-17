@@ -22,7 +22,7 @@ function StatusRow({ ok, label, value }: { ok: boolean; label: string; value: Re
 }
 
 export default async function DashboardPage() {
-  const { userId, orgId, sessionClaims } = await auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) redirect("/sign-in");
 
   // Mirror the Clerk user into Supabase's public.users on every visit
@@ -87,12 +87,12 @@ export default async function DashboardPage() {
           }
         />
         <StatusRow
-          ok={Boolean(claimOrgId)}
-          label="org_id claim (your custom session-token claim)"
+          ok={Boolean(claimOrgId || userId)}
+          label="Tenant (hybrid — organization or individual)"
           value={
             claimOrgId
-              ? `org_id: ${claimOrgId}${orgId && orgId !== claimOrgId ? ` (Clerk active org: ${orgId})` : ""}`
-              : "empty — you have no active organization, OR the org_id custom claim isn't saved in Clerk"
+              ? `Organization account — owner_id = ${claimOrgId}`
+              : `Individual account — owner_id = ${userId}`
           }
         />
         <StatusRow ok={supaOk} label="Supabase read" value={supaMessage} />

@@ -1,21 +1,26 @@
 -- ============================================================================
--- VibeQuarter — multi-tenant schema (Supabase / Postgres)
--- Tenancy: each Clerk Organization is a tenant; every row carries org_id and is
--- protected by RLS reading the tenant from the Clerk session JWT.
+-- VibeQuarter — hybrid multi-tenant schema (Supabase / Postgres)
+-- Tenancy: every row has owner_id = the ACTIVE Clerk Organization (team plan)
+-- or the Clerk user id / sub (individual plan). RLS reads the owner from the
+-- Clerk session JWT via current_tenant().
 -- Setup: connect Clerk as a third-party auth provider in Supabase, then run this.
 -- ============================================================================
 
-create or replace function public.org_id() returns text
+-- current_tenant() = active org id if present, else the user id (sub). NULL
+-- only if neither exists (never for a signed-in user), so it matches no rows.
+create or replace function public.current_tenant() returns text
 language sql stable
 set search_path = ''
 as $$
-  -- NULL (not '') when the claim is absent, so org-less users match zero rows.
-  select nullif(current_setting('request.jwt.claims', true)::json ->> 'org_id', '');
+  select coalesce(
+    nullif(current_setting('request.jwt.claims', true)::json ->> 'org_id', ''),
+    nullif(current_setting('request.jwt.claims', true)::json ->> 'sub', '')
+  );
 $$;
 
 create table if not exists public.sites (
   id          uuid primary key default gen_random_uuid(),
-  org_id      text not null check (org_id <> ''),
+  owner_id    text not null check (owner_id <> ''),
   name        text not null,
   slug        text not null,
   domain      text,
@@ -26,13 +31,13 @@ create table if not exists public.sites (
   created_by  text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  unique (org_id, slug)
+  unique (owner_id, slug)
 );
-create index if not exists sites_org_idx on public.sites (org_id);
+create index if not exists sites_owner_idx on public.sites (owner_id);
 
 create table if not exists public.leads (
   id         uuid primary key default gen_random_uuid(),
-  org_id     text not null check (org_id <> ''),
+  owner_id   text not null check (owner_id <> ''),
   site_id    uuid not null references public.sites (id) on delete cascade,
   name       text,
   email      text,
@@ -40,18 +45,19 @@ create table if not exists public.leads (
   message    text,
   created_at timestamptz not null default now()
 );
-create index if not exists leads_org_idx on public.leads (org_id);
+create index if not exists leads_owner_idx on public.leads (owner_id);
 
 alter table public.sites enable row level security;
 alter table public.leads enable row level security;
 
-create policy "tenant reads its sites" on public.sites for select using (org_id = public.org_id());
-create policy "tenant writes its sites" on public.sites for all using (org_id = public.org_id()) with check (org_id = public.org_id());
-create policy "tenant reads its leads" on public.leads for select using (org_id = public.org_id());
-create policy "tenant writes its leads" on public.leads for all using (org_id = public.org_id()) with check (org_id = public.org_id());
+create policy "owner reads its sites" on public.sites for select using (owner_id = public.current_tenant());
+create policy "owner writes its sites" on public.sites for all using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+create policy "owner reads its leads" on public.leads for select using (owner_id = public.current_tenant());
+create policy "owner writes its leads" on public.leads for all using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
 
 -- Public lead capture from a published site should go through a server route
--- using the service-role key (bypasses RLS), stamping org_id server-side.
+-- using the service-role key (bypasses RLS), stamping owner_id server-side from
+-- a trusted site_id -> owning-tenant lookup (never from the request body).
 
 -- ============================================================================
 -- Users — synced from Clerk on every sign-in via syncUser() server action.
