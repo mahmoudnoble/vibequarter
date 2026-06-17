@@ -35,6 +35,10 @@ export async function syncUser() {
  * Clerk `user.deleted` webhook does this instantly; see the launch checklist.
  */
 export async function reconcileUsers() {
+  // Defense in depth: only run inside an authenticated request.
+  const { userId } = await auth();
+  if (!userId) return;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return;
@@ -43,8 +47,9 @@ export async function reconcileUsers() {
   try {
     const client = await clerkClient();
     const res = await client.users.getUserList({ limit: 500 });
-    // Only prune when we hold the COMPLETE Clerk list — otherwise users beyond
-    // the page would look like orphans and get wrongly deleted. (Prod: webhook.)
+    // Never prune on an empty or incomplete Clerk list — a misconfigured key or
+    // a transient empty 200 would otherwise wipe the entire mirror.
+    if (res.totalCount === 0 || res.data.length === 0) return;
     if (res.totalCount > res.data.length) return;
     liveIds = new Set(res.data.map((u) => u.id));
   } catch {
@@ -56,5 +61,10 @@ export async function reconcileUsers() {
   if (!rows?.length) return;
 
   const orphans = rows.map((r) => r.clerk_id).filter((id) => !liveIds.has(id));
+  // Refuse to empty the whole table — that signals a bad Clerk list, not real deletions.
+  if (orphans.length === rows.length) {
+    console.warn(`[reconcileUsers] skipped deleting all ${rows.length} rows — Clerk list may be incomplete.`);
+    return;
+  }
   if (orphans.length) await supabase.from("users").delete().in("clerk_id", orphans);
 }

@@ -9,12 +9,13 @@ create or replace function public.org_id() returns text
 language sql stable
 set search_path = ''
 as $$
-  select coalesce(nullif(current_setting('request.jwt.claims', true)::json ->> 'org_id', ''), '');
+  -- NULL (not '') when the claim is absent, so org-less users match zero rows.
+  select nullif(current_setting('request.jwt.claims', true)::json ->> 'org_id', '');
 $$;
 
 create table if not exists public.sites (
   id          uuid primary key default gen_random_uuid(),
-  org_id      text not null,
+  org_id      text not null check (org_id <> ''),
   name        text not null,
   slug        text not null,
   domain      text,
@@ -31,7 +32,7 @@ create index if not exists sites_org_idx on public.sites (org_id);
 
 create table if not exists public.leads (
   id         uuid primary key default gen_random_uuid(),
-  org_id     text not null,
+  org_id     text not null check (org_id <> ''),
   site_id    uuid not null references public.sites (id) on delete cascade,
   name       text,
   email      text,

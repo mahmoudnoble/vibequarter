@@ -1,4 +1,4 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 /**
@@ -10,9 +10,17 @@ import { NextResponse } from "next/server";
  */
 const authEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
+// Central, default-deny protection for private routes — defense in depth on top
+// of each page's own auth() check, and automatic coverage for future routes.
+const isProtected = createRouteMatcher(["/dashboard(.*)"]);
+
 const passthrough = () => NextResponse.next();
 
-export default authEnabled ? clerkMiddleware() : passthrough;
+export default authEnabled
+  ? clerkMiddleware(async (auth, req) => {
+      if (isProtected(req)) await auth.protect();
+    })
+  : passthrough;
 
 export const config = {
   matcher: [

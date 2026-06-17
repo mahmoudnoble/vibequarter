@@ -59,6 +59,11 @@ async function reconcile() {
     return;
   }
 
+  if (!Array.isArray(users)) {
+    console.error("[sync] unexpected Clerk response (not an array) — skipping.");
+    return;
+  }
+
   const live = new Map();
   for (const u of users) {
     const primary = u.email_addresses?.find((e) => e.id === u.primary_email_address_id) ?? u.email_addresses?.[0];
@@ -77,15 +82,21 @@ async function reconcile() {
     if (error) console.error("[sync] upsert error:", error.message);
   }
 
-  // Delete orphans — but ONLY when we hold the complete Clerk list, so we never
-  // wipe rows just because pagination cut the list off or the API hiccuped.
+  // Delete orphans — but ONLY when we hold the complete, non-empty Clerk list,
+  // so we never wipe the mirror on pagination, an API hiccup, or an empty 200.
+  if (total === 0 || users.length === 0) return;
   if (total > users.length) {
     console.warn(`[sync] Clerk has ${total} users but only fetched ${users.length}; skipping delete to stay safe.`);
     return;
   }
   const { data: rows, error: selErr } = await supabase.from("users").select("clerk_id");
   if (selErr) return console.error("[sync] select error:", selErr.message);
+  if (!rows?.length) return;
   const orphans = (rows ?? []).map((r) => r.clerk_id).filter((id) => !live.has(id));
+  if (orphans.length === rows.length) {
+    console.warn(`[sync] refusing to delete all ${rows.length} rows — Clerk list may be wrong.`);
+    return;
+  }
   if (orphans.length) {
     const { error } = await supabase.from("users").delete().in("clerk_id", orphans);
     if (error) console.error("[sync] delete error:", error.message);
