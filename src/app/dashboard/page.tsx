@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { OrgControls } from "./org-controls";
 import { WriteTestButton } from "./write-test-button";
 import { PendingIdea } from "./pending-idea";
+import { syncUser } from "@/lib/actions/sync-user";
 
 export const metadata = { title: "Integration test" };
 export const dynamic = "force-dynamic"; // always read fresh auth + DB
@@ -24,6 +25,11 @@ export default async function DashboardPage() {
   const { userId, orgId, sessionClaims } = await auth();
   if (!userId) redirect("/sign-in");
 
+  // Mirror the Clerk user into Supabase's public.users on every visit
+  // (service-role upsert keyed by clerk_id). Without this the user exists in
+  // Clerk but never lands in the database.
+  await syncUser();
+
   const user = await currentUser();
   const claims = (sessionClaims ?? {}) as Record<string, unknown>;
   const claimRole = typeof claims.role === "string" ? claims.role : null;
@@ -43,6 +49,13 @@ export default async function DashboardPage() {
       supaOk = true;
       supaMessage = `Supabase accepted your Clerk token — ${data?.length ?? 0} site(s) visible to your tenant.`;
     }
+  }
+
+  // Confirm the synced row is visible to the user (RLS reads own record by sub).
+  let userSynced = false;
+  if (supabase) {
+    const { data } = await supabase.from("users").select("clerk_id").eq("clerk_id", userId).maybeSingle();
+    userSynced = Boolean(data);
   }
 
   const email = user?.emailAddresses[0]?.emailAddress ?? "(no email)";
@@ -80,6 +93,11 @@ export default async function DashboardPage() {
           }
         />
         <StatusRow ok={supaOk} label="Supabase read" value={supaMessage} />
+        <StatusRow
+          ok={userSynced}
+          label="Supabase users sync"
+          value={userSynced ? "Your Clerk account is mirrored in public.users." : "not found in public.users yet"}
+        />
       </section>
 
       <section className="mt-6 rounded-xl border border-border bg-card p-5 shadow-sm">
