@@ -1,0 +1,219 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   VibeQuarter — global tokens + base + the section "tone" system.
+   The landing alternates FIXED dark / light / jade sections (editorial),
+   not a single user-toggled theme. Each <Section tone> sets --grid/--dot
+   colors that the pattern utilities consume.
+   Fonts (--font-display/body/mono/arabic) injected by next/font.
+   ============================================================ */
+
+:root {
+  /* semantic — LIGHT base — RGB channels for Tailwind alpha modifiers */
+  --background: 245 248 251; /* ink-50 */
+  --foreground: 18 26 35; /* ink-900 */
+  --card: 255 255 255;
+  --card-foreground: 18 26 35;
+  --muted: 236 241 246; /* ink-100 */
+  --muted-foreground: 95 111 129; /* ink-500 */
+  --primary: 16 185 129; /* jade-500 */
+  --primary-foreground: 255 255 255; /* white text on brand (design-system --text-on-brand) */
+  --border: 218 226 235; /* ink-200 */
+  --input: 218 226 235;
+  --ring: 16 185 129;
+}
+
+.dark {
+  --background: 10 15 22; /* ink-950 */
+  --foreground: 245 248 251; /* ink-50 */
+  --card: 15 22 32;
+  --card-foreground: 245 248 251;
+  --muted: 18 26 35;
+  --muted-foreground: 144 159 178; /* ink-400 */
+  --primary: 16 185 129;
+  --primary-foreground: 255 255 255;
+  --border: 38 49 61;
+  --input: 38 49 61;
+  --ring: 16 185 129;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: var(--font-body), var(--font-arabic), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* `clip` (not `hidden`) stops horizontal scroll WITHOUT making <body> a
+     scroll container — otherwise window scroll never fires (breaks parallax). */
+  overflow-x: clip;
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-arabic), sans-serif;
+}
+
+/* Arabic / RTL: use the Arabic face for display + body when dir=rtl, and reset
+   the tight latin tracking (Arabic must not be letter-spaced). */
+[dir="rtl"] body {
+  font-family: var(--font-arabic), var(--font-body), system-ui, sans-serif;
+}
+[dir="rtl"] .font-display {
+  font-family: var(--font-arabic), var(--font-display), sans-serif;
+  letter-spacing: 0 !important;
+}
+[dir="rtl"] .font-mono {
+  font-family: var(--font-arabic), var(--font-mono), monospace;
+  letter-spacing: 0.02em;
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.24);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--ring));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@layer components {
+  /* // MONO EYEBROW — brand signature motif (used deliberately, not on every section). */
+  .eyebrow {
+    @apply inline-flex items-center font-mono text-xs uppercase tracking-wider;
+    color: rgb(14 156 109); /* jade-600 */
+  }
+  .eyebrow::before {
+    content: "// ";
+    opacity: 0.65;
+    white-space: pre;
+  }
+  .tone-dark .eyebrow,
+  .tone-jade .eyebrow {
+    color: rgb(102 224 178); /* jade-300 */
+  }
+  .tone-jade .eyebrow {
+    color: rgba(255, 255, 255, 0.82);
+  }
+}
+
+@layer utilities {
+  /* ---- Section tones: set bg + base text + pattern colors -------- */
+  .tone-light {
+    --grid: 18 26 35; /* ink-900 lines on light */
+    background-color: rgb(245 248 251);
+    color: rgb(18 26 35);
+  }
+  .tone-light-pure {
+    --grid: 18 26 35;
+    background-color: rgb(255 255 255);
+    color: rgb(18 26 35);
+  }
+  .tone-dark {
+    --grid: 226 235 245;
+    background-color: rgb(10 15 22);
+    color: rgb(245 248 251);
+  }
+  /* Like tone-dark but WITHOUT its own background — sits on a shared dark zone
+     so adjacent dark sections read as one continuous background. */
+  .tone-dark-bare {
+    --grid: 226 235 245;
+    color: rgb(245 248 251);
+  }
+  .tone-jade {
+    --grid: 255 255 255;
+    background-color: rgb(16 185 129);
+    color: rgb(6 19 13);
+  }
+
+  /* ---- Decorative grid + dot patterns (consume --grid) ----------- */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgb(var(--grid) / 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--grid) / 0.06) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .bg-grid-sm {
+    background-image:
+      linear-gradient(to right, rgb(var(--grid) / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--grid) / 0.05) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(rgb(var(--grid) / 0.12) 1px, transparent 1.5px);
+    background-size: 22px 22px;
+  }
+
+  /* ---- Masks to fade patterns / marquees out at the edges -------- */
+  .mask-fade-y {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+  }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  }
+  .mask-radial {
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 35%, transparent 78%);
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 35%, transparent 78%);
+  }
+
+  /* ---- Glass surfaces (used PURPOSEFULLY: nav, prompt box, cards) - */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+  }
+  .glass-dark {
+    background: rgba(15, 22, 32, 0.55);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  /* ---- Jade accent word in display headlines (replaces gradient-text) */
+  .text-jade-accent {
+    color: rgb(16 185 129);
+  }
+  .tone-dark .text-jade-accent {
+    color: rgb(46 203 148); /* jade-400 — brighter on dark */
+  }
+
+  /* ---- Animated conic / gradient ring border (for featured cards) -- */
+  .ring-flow {
+    background: conic-gradient(
+      from 0deg,
+      rgba(16, 185, 129, 0) 0deg,
+      rgba(16, 185, 129, 0.9) 70deg,
+      rgba(18, 166, 198, 0.9) 140deg,
+      rgba(91, 91, 242, 0) 230deg,
+      rgba(16, 185, 129, 0) 360deg
+    );
+  }
+
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+}
+
+/* Honor reduced motion globally (component-level fallbacks also exist). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

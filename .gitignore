@@ -1,0 +1,23 @@
+/node_modules
+/.pnp
+.pnp.*
+/.next/
+/out/
+/build
+.DS_Store
+*.pem
+Thumbs.db
+npm-debug.log*
+.env
+.env.local
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# Claude Code — local-only / ephemeral
+/.claude/settings.local.json
+/.claude/worktrees/
+
+# Stray nested git repo (accidental `git init` in subfolder)
+/vibequarter/
