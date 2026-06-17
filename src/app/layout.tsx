@@ -62,7 +62,15 @@ function Document({ children }: { children: React.ReactNode }) {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   if (authEnabled) {
     return (
-      <ClerkProvider appearance={{ variables: { colorPrimary: "#10B981", borderRadius: "12px" } }}>
+      <ClerkProvider
+        appearance={{
+          variables: { colorPrimary: "#10B981", borderRadius: "12px" },
+          // Make the bot-protection CAPTCHA full-width + branded so, when it
+          // does appear (email/password path, or post-OAuth callback for a new
+          // account), it's obvious — not a small box that's easy to miss.
+          captcha: { theme: "light", size: "flexible", language: "en-US" },
+        }}
+      >
         <Document>{children}</Document>
       </ClerkProvider>
     );
