@@ -8,13 +8,13 @@ export async function getSupabaseServerClient() {
   if (!url || !key) return null;
 
   const { getToken } = await auth();
-  const clerkToken = await getToken({ template: "supabase" }).catch(() => null);
-
   const cookieStore = await cookies();
+
+  // Native Clerk Third-Party Auth: pass the Clerk session token per-request via
+  // accessToken (re-evaluated on every call, so it never goes stale) instead of
+  // pinning an Authorization header at client-creation time.
   return createServerClient(url, key, {
-    global: clerkToken
-      ? { headers: { Authorization: `Bearer ${clerkToken}` } }
-      : {},
+    accessToken: async () => (await getToken()) ?? null,
     cookies: {
       getAll() {
         return cookieStore.getAll();

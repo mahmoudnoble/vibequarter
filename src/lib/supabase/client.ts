@@ -9,14 +9,11 @@ export function useSupabaseClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
 
+  // Native Clerk Third-Party Auth: Supabase trusts Clerk's session token
+  // directly, so hand supabase-js a per-request accessToken — no JWT template,
+  // no manual Authorization header. Requires the Clerk↔Supabase integration
+  // enabled on both dashboards.
   return createBrowserClient(url, key, {
-    global: {
-      fetch: async (fetchUrl: RequestInfo | URL, options: RequestInit = {}) => {
-        const clerkToken = await getToken({ template: "supabase" }).catch(() => null);
-        const headers = new Headers(options.headers);
-        if (clerkToken) headers.set("Authorization", `Bearer ${clerkToken}`);
-        return fetch(fetchUrl, { ...options, headers });
-      },
-    },
+    accessToken: async () => (await getToken()) ?? null,
   });
 }
