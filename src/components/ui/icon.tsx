@@ -5,7 +5,7 @@ import {
   Plus, Minus, Star, Zap, ShieldCheck, Users, ChevronsLeftRight, MoveHorizontal,
   Stethoscope, Scissors, Scale, GraduationCap, Sofa, Home, MessageCircle, Phone,
   PencilRuler, LayoutTemplate, Rocket, MousePointerClick, Bot, Wand2, Play, Clock,
-  TrendingUp, BadgeCheck, Layers, CircleDot, Target, Sparkle, Loader2, Github, type LucideIcon,
+  TrendingUp, BadgeCheck, Layers, CircleDot, Target, Sparkle, Loader2, Github, Settings, type LucideIcon,
 } from "lucide-react";
 
 const registry: Record<string, LucideIcon> = {
@@ -15,7 +15,7 @@ const registry: Record<string, LucideIcon> = {
   Plus, Minus, Star, Zap, ShieldCheck, Users, ChevronsLeftRight, MoveHorizontal,
   Stethoscope, Scissors, Scale, GraduationCap, Sofa, Home, MessageCircle, Phone,
   PencilRuler, LayoutTemplate, Rocket, MousePointerClick, Bot, Wand2, Play, Clock,
-  TrendingUp, BadgeCheck, Layers, CircleDot, Target, Sparkle, Loader2, Github,
+  TrendingUp, BadgeCheck, Layers, CircleDot, Target, Sparkle, Loader2, Github, Settings,
 };
 
 export function Icon({

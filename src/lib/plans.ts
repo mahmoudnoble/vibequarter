@@ -11,6 +11,7 @@ export type Plan = {
   price_monthly: number | null;
   price_yearly: number | null;
   currency: string;
+  model: string;
   name: Bilingual;
   blurb: Bilingual;
   features: { en: string[]; ar: string[] };

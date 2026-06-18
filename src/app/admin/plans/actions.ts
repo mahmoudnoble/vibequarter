@@ -10,6 +10,7 @@ export type PlanInput = {
   slug: string;
   type: "personal" | "organization";
   max_members: number;
+  model: string;
   price_monthly: number | null;
   price_yearly: number | null;
   name: Bilingual;

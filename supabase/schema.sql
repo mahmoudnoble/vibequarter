@@ -100,6 +100,7 @@ create table if not exists public.plans (
   price_monthly numeric,
   price_yearly  numeric,
   currency      text not null default 'USD',
+  model         text not null default 'claude-haiku-4-5-20251001', -- Claude model the builder agent uses on this plan
   name          jsonb not null,                                  -- { "en": ..., "ar": ... }
   blurb         jsonb not null,
   features      jsonb not null default '{"en":[],"ar":[]}'::jsonb,
