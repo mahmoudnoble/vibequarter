@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 import { Logo } from "@/components/ui/logo";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,8 @@ const tabs = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { user } = useUser();
+  const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
   return (
     <aside className="flex shrink-0 flex-col gap-1 border-b border-border bg-card p-3 md:min-h-screen md:w-60 md:border-b-0 md:border-e">
       <div className="mb-4 hidden px-2 pt-1 md:block">
@@ -42,8 +44,9 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto hidden border-t border-border pt-3 md:block">
-        <UserButton showName afterSignOutUrl="/" appearance={{ variables: { colorPrimary: "#10B981" } }} />
+      <div className="mt-auto hidden items-center gap-2.5 border-t border-border pt-3 md:flex">
+        <UserButton afterSignOutUrl="/" appearance={{ variables: { colorPrimary: "#10B981" } }} />
+        <span className="truncate text-sm font-medium text-foreground">{userName}</span>
       </div>
     </aside>
   );
