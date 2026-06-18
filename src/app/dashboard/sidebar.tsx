@@ -18,7 +18,7 @@ const tabs = [
 export function DashboardSidebar() {
   const pathname = usePathname();
   return (
-    <aside className="flex shrink-0 flex-col gap-1 border-b border-border bg-card p-3 md:min-h-screen md:w-60 md:border-b-0 md:border-r">
+    <aside className="flex shrink-0 flex-col gap-1 border-b border-border bg-card p-3 md:min-h-screen md:w-60 md:border-b-0 md:border-e">
       <div className="mb-4 hidden px-2 pt-1 md:block">
         <Logo size="sm" />
       </div>

@@ -19,21 +19,21 @@ export function BuilderChat() {
       { role: "user", text },
       {
         role: "assistant",
-        text: "Got it — your request is saved ✓. The AI builder connects once the generation engine is enabled; then I'll build the site here and you can edit text/images and hit Publish.",
+        text: "Got it — your request is saved ✓. The AI builder connects once the generation engine is enabled; then I'll build the site in the preview and you can edit it here, then hit Publish.",
       },
     ]);
     setValue("");
   };
 
   return (
-    <div className="flex min-h-[55vh] flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex-1 space-y-4 overflow-y-auto p-5">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-[40vh] flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 ? (
-          <div className="flex h-full min-h-[40vh] flex-col items-center justify-center text-center">
-            <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-jade-500/12 text-jade-600">
-              <Icon name="Wand2" className="h-6 w-6" />
+          <div className="flex h-full min-h-[35vh] flex-col items-center justify-center text-center">
+            <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-jade-500/12 text-jade-600">
+              <Icon name="Wand2" className="h-5 w-5" />
             </span>
-            <p className="font-semibold text-foreground">Describe your business and I&apos;ll build the site</p>
+            <p className="font-semibold text-foreground">Describe your business</p>
             <p className="mt-1 text-sm text-muted-foreground">e.g. &ldquo;A booking site for my dental clinic in Dubai.&rdquo;</p>
           </div>
         ) : (
@@ -41,7 +41,7 @@ export function BuilderChat() {
             <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <div
                 className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
+                  "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm",
                   m.role === "user" ? "bg-jade-600 text-white" : "border border-border bg-muted text-foreground",
                 )}
               >
