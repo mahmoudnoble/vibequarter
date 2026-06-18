@@ -49,6 +49,29 @@ export default function SeoPage() {
         <ToolCard title="SEO tools" icon="Search" items={seoTools} />
         <ToolCard title="GEO — AI visibility" icon="Sparkles" items={geoTools} />
       </div>
+
+      <div className="mt-5 rounded-xl border border-border bg-card p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-jade-500/12 text-jade-600">
+            <Icon name="PencilRuler" className="h-[18px] w-[18px]" />
+          </span>
+          <h2 className="font-display font-semibold text-foreground">Blog builder</h2>
+        </div>
+        <p className="mb-3 text-sm text-muted-foreground">Write &amp; publish posts that rank — the full flow, in one place:</p>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {[
+            "Write the post (with AI assist)",
+            "Choose a thumbnail / cover image",
+            "Per-post SEO: title, description, slug, social image",
+            "Auto Article structured data + sitemap entry",
+          ].map((it, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Icon name="Check" className="mt-0.5 h-4 w-4 shrink-0 text-jade-500" strokeWidth={2.4} />
+              {it}
+            </li>
+          ))}
+        </ul>
+      </div>
       <p className="mt-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
         ✨ These activate once you publish your first site — most run automatically from your business details.
       </p>

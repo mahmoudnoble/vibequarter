@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
 import { Logo } from "@/components/ui/logo";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
@@ -42,14 +42,8 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto hidden items-center justify-between gap-2 border-t border-border pt-3 md:flex">
-        <OrganizationSwitcher
-          hidePersonal={false}
-          afterSelectOrganizationUrl="/dashboard"
-          afterCreateOrganizationUrl="/dashboard"
-          appearance={{ variables: { colorPrimary: "#10B981" } }}
-        />
-        <UserButton afterSignOutUrl="/" />
+      <div className="mt-auto hidden border-t border-border pt-3 md:block">
+        <UserButton showName afterSignOutUrl="/" appearance={{ variables: { colorPrimary: "#10B981" } }} />
       </div>
     </aside>
   );

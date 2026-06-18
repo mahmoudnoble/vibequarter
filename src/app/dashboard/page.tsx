@@ -1,8 +1,8 @@
 import { buttonClasses } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
 import { PendingIdea } from "./pending-idea";
 import { PlanOnboarding } from "./plan-onboarding";
 import { BuilderChat } from "./builder-chat";
+import { BuilderPreview } from "./builder-preview";
 
 export const metadata = { title: "Builder" };
 
@@ -30,28 +30,8 @@ export default function BuilderPage() {
         </div>
       </div>
 
-      {/* Preview pane */}
-      <div className="flex min-h-[60vh] flex-1 flex-col bg-muted/40 md:min-h-0">
-        <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
-          <span className="flex gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-ink-300" />
-            <span className="h-2.5 w-2.5 rounded-full bg-ink-300" />
-            <span className="h-2.5 w-2.5 rounded-full bg-ink-300" />
-          </span>
-          <span className="ms-2 truncate rounded-md bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
-            yoursite.vibequarter.site
-          </span>
-        </div>
-        <div className="flex flex-1 items-center justify-center p-6 text-center">
-          <div>
-            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-jade-500/12 text-jade-600">
-              <Icon name="LayoutTemplate" className="h-6 w-6" />
-            </span>
-            <p className="font-semibold text-foreground">Your site preview appears here</p>
-            <p className="mt-1 text-sm text-muted-foreground">Start chatting on the side — we&apos;ll build it live, then you publish.</p>
-          </div>
-        </div>
-      </div>
+      {/* Preview pane (desktop / tablet / mobile) */}
+      <BuilderPreview />
     </div>
   );
 }

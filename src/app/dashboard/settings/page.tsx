@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { OrganizationSwitcher } from "@clerk/nextjs";
 import { Icon } from "@/components/ui/icon";
 
 export const metadata = { title: "Settings" };
@@ -28,7 +29,20 @@ export default async function SettingsPage() {
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-display font-semibold text-foreground">Account</h2>
         <Row label="Email" value={email} />
-        <Row label="Workspace" value={orgId ? "Organization (team)" : "Individual"} />
+        <Row label="Current workspace" value={orgId ? "Organization (team)" : "Individual"} />
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-1 font-display font-semibold text-foreground">Workspace</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Switch between your personal account and team organizations, or create a team.
+        </p>
+        <OrganizationSwitcher
+          hidePersonal={false}
+          afterSelectOrganizationUrl="/dashboard"
+          afterCreateOrganizationUrl="/dashboard"
+          appearance={{ variables: { colorPrimary: "#10B981" } }}
+        />
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
