@@ -1,21 +1,36 @@
-import { Icon } from "@/components/ui/icon";
+import { getOwner } from "@/lib/tenant";
+import {
+  ensureClinicContext,
+  getAllAppointmentsFull,
+  getPatients,
+  toServiceViews,
+  toWorkingHourInputs,
+} from "@/lib/booking/clinic";
+import { BookingStudio } from "./booking-studio";
 
-export const metadata = { title: "Booking" };
+export const metadata = { title: "Booking agent" };
 
-export default function BookingPage() {
+export default async function BookingPage() {
+  const owner = await getOwner();
+  const ctx = owner ? await ensureClinicContext(owner) : null;
+
+  const [allAppts, patients] = ctx && owner
+    ? await Promise.all([
+        getAllAppointmentsFull(ctx.clinic.id, owner),
+        getPatients(ctx.clinic.id, owner),
+      ])
+    : [[], []];
+
   return (
-    <div className="mx-auto max-w-3xl px-5 py-8 md:px-8">
-      <h1 className="font-display text-2xl font-bold text-foreground">Booking agent</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        An AI agent that turns visitors into booked appointments — including over WhatsApp.
-      </p>
-      <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border p-10 text-center">
-        <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-jade-500/12 text-jade-600">
-          <Icon name="CalendarCheck" className="h-6 w-6" />
-        </span>
-        <p className="font-semibold text-foreground">Coming soon</p>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">We&apos;ll set up the booking agent together in a later step.</p>
-      </div>
-    </div>
+    <BookingStudio
+      clinicId={ctx?.clinic.id ?? ""}
+      clinicName={ctx?.clinic.name ?? ""}
+      waPnId={ctx?.clinic.whatsapp_phone_number_id ?? null}
+      timezone={ctx?.clinic.timezone ?? "Asia/Riyadh"}
+      services={ctx ? toServiceViews(ctx.services) : []}
+      workingHours={ctx ? toWorkingHourInputs(ctx.hours) : []}
+      initialAppointments={allAppts}
+      initialPatients={patients}
+    />
   );
 }

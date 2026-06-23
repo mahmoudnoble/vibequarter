@@ -13,6 +13,7 @@ type FormState = {
   type: "personal" | "organization";
   max_members: string;
   model: string;
+  image_gen: boolean;
   price_monthly: string;
   price_yearly: string;
   name_en: string;
@@ -36,7 +37,8 @@ function toForm(p?: Plan): FormState {
     slug: p?.slug ?? "",
     type: p?.type ?? "personal",
     max_members: String(p?.max_members ?? 1),
-    model: p?.model ?? "claude-haiku-4-5-20251001",
+    model: p?.model ?? "claude-haiku-4-5",
+    image_gen: p?.image_gen ?? false,
     price_monthly: p?.price_monthly?.toString() ?? "",
     price_yearly: p?.price_yearly?.toString() ?? "",
     name_en: p?.name.en ?? "",
@@ -76,6 +78,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
         type: f.type,
         max_members: Number(f.max_members) || 1,
         model: f.model,
+        image_gen: f.image_gen,
         price_monthly: f.price_monthly === "" ? null : Number(f.price_monthly),
         price_yearly: f.price_yearly === "" ? null : Number(f.price_yearly),
         name: { en: f.name_en, ar: f.name_ar },
@@ -121,7 +124,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
         <div>
           <label className={label}>Claude model</label>
           <select className={field} value={f.model} onChange={(e) => set("model", e.target.value)}>
-            <option value="claude-haiku-4-5-20251001">Haiku 4.5 (cheapest)</option>
+            <option value="claude-haiku-4-5">Haiku 4.5 (cheapest)</option>
             <option value="claude-sonnet-4-6">Sonnet 4.6</option>
             <option value="claude-opus-4-8">Opus 4.8 (top)</option>
           </select>
@@ -195,6 +198,9 @@ export function PlanForm({ plan }: { plan?: Plan }) {
         </label>
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" checked={f.is_active} onChange={(e) => set("is_active", e.target.checked)} /> Active
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input type="checkbox" checked={f.image_gen} onChange={(e) => set("image_gen", e.target.checked)} /> GPT Image
         </label>
         <div className="ms-auto flex items-center gap-3">
           {msg && <span className="text-xs text-muted-foreground">{msg}</span>}

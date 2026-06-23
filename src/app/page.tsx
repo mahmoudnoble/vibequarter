@@ -1,3 +1,7 @@
+// Revalidate the landing page at most every hour — plans data is cached separately.
+// Eliminates the cold Supabase round-trip on every visit.
+export const revalidate = 3600;
+
 import { Aurora } from "@/components/motion/aurora";
 import { Nav } from "@/components/landing/nav";
 import { Hero } from "@/components/landing/hero";

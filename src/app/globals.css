@@ -20,6 +20,8 @@
   --muted-foreground: 95 111 129; /* ink-500 */
   --primary: 16 185 129; /* jade-500 */
   --primary-foreground: 255 255 255; /* white text on brand (design-system --text-on-brand) */
+  --secondary: 16 185 129; /* second brand color — defaults to primary (mono) until a brand sets it */
+  --secondary-foreground: 255 255 255;
   --border: 218 226 235; /* ink-200 */
   --input: 218 226 235;
   --ring: 16 185 129;
@@ -34,6 +36,8 @@
   --muted-foreground: 144 159 178; /* ink-400 */
   --primary: 16 185 129;
   --primary-foreground: 255 255 255;
+  --secondary: 16 185 129;
+  --secondary-foreground: 255 255 255;
   --border: 38 49 61;
   --input: 38 49 61;
   --ring: 16 185 129;
@@ -41,6 +45,22 @@
 
 * {
   border-color: rgb(var(--border));
+}
+
+/* Per-template display tracking — scoped to generated sites so it never touches
+   the dashboard/marketing chrome. `--display-tracking` is set per template. */
+[data-vq-site] .font-display {
+  letter-spacing: var(--display-tracking, -0.02em);
+}
+
+/* Inline-editor placeholder: an empty editable field in edit mode carries
+   data-vq-ph (its hint). Render the hint via ::before so it is NOT part of
+   textContent — blurring an untouched field then commits "" instead of the
+   hint string. The hint vanishes the moment the user types (no longer :empty). */
+[data-vq-ph]:empty::before {
+  content: attr(data-vq-ph);
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 html {
@@ -75,6 +95,18 @@ body {
 [dir="rtl"] .font-mono {
   font-family: var(--font-arabic), var(--font-mono), monospace;
   letter-spacing: 0.02em;
+}
+
+/* Generated sites carry `dir` on their own [data-vq-site] wrapper (NOT <body>),
+   so the `[dir="rtl"] body` rule above never reaches them. AND each template
+   overrides --font-body with a Latin face (Inter / Sora / Fraunces) whose
+   next/font build ships a baked-in Arial fallback that ITSELF covers Arabic — so
+   Arabic body text was silently rendering in Arial, not our face. Force the
+   Arabic face FIRST for every text inside an RTL generated site (headings + mono
+   are already handled by the [dir="rtl"] .font-display / .font-mono rules). */
+[data-vq-site][dir="rtl"],
+[data-vq-site][dir="rtl"] .font-body {
+  font-family: var(--font-arabic), var(--font-body), system-ui, sans-serif;
 }
 
 ::selection {
@@ -204,6 +236,24 @@ body {
 
   .text-balance { text-wrap: balance; }
   .text-pretty { text-wrap: pretty; }
+
+  /* ---- Premium card lift for generated sites: rise + brand glow + hairline ---
+     Brand-aware (uses --primary so a re-themed tenant keeps its own glow). The
+     global reduced-motion block below neutralises the transition; the hover end
+     state is harmless when applied instantly. */
+  .vq-lift {
+    transition:
+      transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.32s ease;
+  }
+  .vq-lift:hover {
+    transform: translateY(-6px);
+    border-color: rgb(var(--primary) / 0.4);
+    box-shadow:
+      0 1px 0 rgb(var(--primary) / 0.12),
+      0 26px 56px -26px rgb(var(--primary) / 0.5);
+  }
 }
 
 /* Honor reduced motion globally (component-level fallbacks also exist). */
@@ -216,4 +266,48 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ============================================================
+   lumiere "Living Wave" — ambient SectionDecor motion.
+   transform + opacity ONLY (compositor-friendly; no scale on
+   blurred layers → no GPU blur re-raster). Each node's INLINE
+   style is its resting look, so the reduced-motion snap above
+   lands clean: glows hold their base alpha, the bokeh mote
+   rests at opacity 0. `--o` carries each node's base alpha
+   into its keyframes.
+   ============================================================ */
+.vq-lum-drift {
+  --o: 1;
+  will-change: transform, opacity;
+  animation: vq-lum-drift 22s ease-in-out infinite;
+}
+@keyframes vq-lum-drift {
+  0%   { transform: translate3d(0, 0, 0); opacity: var(--o); }
+  50%  { transform: translate3d(2%, -2.5%, 0); opacity: calc(var(--o) * 1.22); }
+  100% { transform: translate3d(0, 0, 0); opacity: var(--o); }
+}
+
+.vq-lum-crest {
+  --o: 1;
+  will-change: transform, opacity;
+  animation: vq-lum-crest 24s ease-in-out infinite;
+}
+@keyframes vq-lum-crest {
+  0%   { transform: translate3d(0, 0, 0); opacity: calc(var(--o) * 0.7); }
+  50%  { transform: translate3d(20%, -6px, 0); opacity: var(--o); }
+  100% { transform: translate3d(0, 0, 0); opacity: calc(var(--o) * 0.7); }
+}
+
+.vq-lum-float {
+  --o: 1;
+  will-change: transform, opacity;
+  animation: vq-lum-float 20s ease-in-out infinite;
+}
+@keyframes vq-lum-float {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  25%  { opacity: var(--o); }
+  50%  { transform: translate3d(2%, -32%, 0); opacity: var(--o); }
+  75%  { opacity: var(--o); }
+  100% { transform: translate3d(0, 0, 0); opacity: 0; }
 }

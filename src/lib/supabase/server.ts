@@ -1,6 +1,18 @@
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Service-role client — BYPASSES RLS. Server-only, never expose to the client.
+ * Use for trusted writes that stamp owner_id themselves (storage uploads,
+ * public-site reads, billing/onboarding). Returns null if env is missing.
+ */
+export function getSupabaseServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
 export async function getSupabaseServerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

@@ -132,7 +132,7 @@ function WorkModal({ item, labels, onClose }: { item: Item | null; labels: { vie
             </span>
             <span className="ms-2 inline-flex items-center gap-1.5 truncate rounded-md bg-white/10 px-2.5 py-1 text-[11px] text-ink-300">
               <Icon name="ShieldCheck" className="h-3 w-3 text-jade-400" strokeWidth={2.4} />
-              vibequarter.site
+              vibequarter.com
             </span>
           </div>
           <div className="flex items-center gap-2">

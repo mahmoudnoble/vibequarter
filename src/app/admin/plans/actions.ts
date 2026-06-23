@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { isSuperAdmin } from "@/lib/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import type { Bilingual } from "@/lib/plans";
 
 export type PlanInput = {
@@ -11,6 +11,7 @@ export type PlanInput = {
   type: "personal" | "organization";
   max_members: number;
   model: string;
+  image_gen: boolean;
   price_monthly: number | null;
   price_yearly: number | null;
   name: Bilingual;
@@ -46,6 +47,7 @@ export async function savePlan(input: PlanInput): Promise<Result> {
 
   revalidatePath("/admin/plans");
   revalidatePath("/");
+  revalidateTag("plans");
   return { ok: true };
 }
 
@@ -59,5 +61,6 @@ export async function deletePlan(id: string): Promise<Result> {
 
   revalidatePath("/admin/plans");
   revalidatePath("/");
+  revalidateTag("plans");
   return { ok: true };
 }
