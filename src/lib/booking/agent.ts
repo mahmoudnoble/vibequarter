@@ -178,6 +178,7 @@ export async function runBookingAgent(opts: {
   const system = buildSystemPrompt(ctx, opts.locale, now);
 
   async function runTool(name: string, input: Record<string, unknown>): Promise<string> {
+    console.log(`[booking-tool] call ${name} ${JSON.stringify(input).slice(0, 250)}`);
     if (name === "check_availability") {
       const svc = resolveService(ctx, input.service as string | undefined);
       const durationMin = svc?.duration_min ?? 30;
@@ -244,6 +245,8 @@ export async function runBookingAgent(opts: {
         startIso,
         endIso: slot.endIso!,
       });
+
+      console.log(`[booking-tool] insert ok=${res.ok} conflict=${res.conflict ?? false} start=${startIso}`);
 
       if (res.conflict) {
         booked = await getUpcomingAppointments(ctx.clinic.id, owner);

@@ -91,7 +91,10 @@ async function processMessage({
   try {
     const result = await runBookingAgent({
       ctx,
-      model: "claude-haiku-4-5",
+      // Sonnet (not Haiku) for the live WhatsApp agent: booking is a critical
+      // flow and needs strict tool discipline — never claim "booked" unless
+      // book_appointment actually returned booked:true.
+      model: "claude-sonnet-4-6",
       locale: "ar",
       turns,
       owner,
