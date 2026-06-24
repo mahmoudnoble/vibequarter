@@ -51,6 +51,18 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+/** Parse a clinic-local time the agent passes — accepts 24h ("13:30") and 12h ("1:30 PM"). */
+function parseLocalTime(t: string): { h: number; mi: number } | null {
+  const m = t.trim().toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (!m) return null;
+  let h = +m[1];
+  const mi = +m[2];
+  if (m[3] === "PM" && h < 12) h += 12;
+  if (m[3] === "AM" && h === 12) h = 0;
+  if (h > 23 || mi > 59) return null;
+  return { h, mi };
+}
+
 function resolveService(ctx: ClinicContext, query: string | undefined): ServiceRow | null {
   if (!query) return null;
   const q = query.trim().toLowerCase();
@@ -195,12 +207,13 @@ export async function runBookingAgent(opts: {
       const patientPhone = String(input.patient_phone ?? "").trim();
       const dateStr = String(input.date ?? "").trim();
       const timeStr = String(input.time ?? "").trim();
+      const parsedTime = parseLocalTime(timeStr);
       const missing: string[] = [];
       if (!patientName) missing.push("patient_name");
       if (!patientPhone) missing.push("patient_phone");
       if (!svc) missing.push("service");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) missing.push("date");
-      if (!/^\d{1,2}:\d{2}$/.test(timeStr)) missing.push("time");
+      if (!parsedTime) missing.push("time");
       if (missing.length > 0) {
         return JSON.stringify({ booked: false, error: "need_info", missing });
       }
@@ -209,8 +222,7 @@ export async function runBookingAgent(opts: {
       // here so the model never does timezone math (which it gets wrong).
       const tz = ctx.clinic.timezone || "Asia/Riyadh";
       const [yy, mm, dd] = dateStr.split("-").map(Number);
-      const [hh, mi] = timeStr.split(":").map(Number);
-      const startIso = zonedWallToUtc(yy, mm, dd, hh, mi, tz).toISOString();
+      const startIso = zonedWallToUtc(yy, mm, dd, parsedTime!.h, parsedTime!.mi, tz).toISOString();
 
       const durationMin = svc!.duration_min;
       const slot = checkSlot({ ctx, booked, startIso, durationMin, now });
