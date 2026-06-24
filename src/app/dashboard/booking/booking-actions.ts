@@ -13,9 +13,11 @@ import {
   replaceWorkingHours,
   getAllAppointmentsFull,
   setAppointmentStatus,
+  getAppointmentNotifyInfo,
   getPatients,
 } from "@/lib/booking/clinic";
 import { runBookingAgent } from "@/lib/booking/agent";
+import { sendText } from "@/lib/whatsapp/client";
 import type {
   AppointmentFull,
   AppointmentView,
@@ -153,7 +155,42 @@ export async function updateApptStatusAction(
   if (!owner) return { ok: false };
   const ctx = await ensureClinicContext(owner);
   if (!ctx) return { ok: false };
+
+  // Grab contact info before the update so we can notify the patient.
+  const info =
+    status === "cancelled"
+      ? await getAppointmentNotifyInfo(appointmentId, ctx.clinic.id, owner)
+      : null;
+
   const ok = await setAppointmentStatus(appointmentId, ctx.clinic.id, owner, status);
+
+  // When the clinic cancels from the dashboard, tell the patient on WhatsApp.
+  // (Free-form text only delivers inside the 24h window; production needs an
+  // approved template for older conversations.)
+  if (
+    ok &&
+    status === "cancelled" &&
+    info?.patientPhone &&
+    ctx.clinic.whatsapp_phone_number_id
+  ) {
+    const when = new Intl.DateTimeFormat("ar-SA", {
+      timeZone: ctx.clinic.timezone || "Asia/Riyadh",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(info.startIso));
+    const clinicName = ctx.clinic.name?.trim() || "العيادة";
+    const svc = info.serviceNameAr ? ` (${info.serviceNameAr})` : "";
+    const body = `مرحباً 👋\nنأسف لإبلاغك أن موعدك في ${clinicName}${svc} يوم ${when} تم إلغاؤه.\nللحجز من جديد راسلنا في أي وقت ونحن سعداء بخدمتك. 🌟`;
+    try {
+      await sendText(info.patientPhone, body, ctx.clinic.whatsapp_phone_number_id);
+    } catch (err) {
+      console.error("[booking] cancel-notify failed:", err);
+    }
+  }
+
   return { ok };
 }
 

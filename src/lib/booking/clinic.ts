@@ -118,6 +118,53 @@ export async function getUpcomingAppointments(
   return (data ?? []) as AppointmentRow[];
 }
 
+/** This patient's upcoming booked appointments (by phone), soonest first. */
+export async function getPatientUpcomingAppointments(
+  clinicId: string,
+  owner: string,
+  patientPhone: string,
+): Promise<Array<{ id: string; serviceNameEn: string | null; serviceNameAr: string | null; startIso: string }>> {
+  const db = getSupabaseServiceClient();
+  if (!db || !patientPhone) return [];
+  const [apptRes, svcRes] = await Promise.all([
+    db
+      .from("appointments")
+      .select("id, service_id, starts_at")
+      .eq("clinic_id", clinicId)
+      .eq("owner_id", owner)
+      .eq("patient_phone", patientPhone)
+      .eq("status", "booked")
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at", { ascending: true }),
+    db.from("clinic_services").select("id, name_en, name_ar").eq("clinic_id", clinicId),
+  ]);
+  const byId = new Map(
+    ((svcRes.data ?? []) as Array<{ id: string; name_en: string; name_ar: string }>).map((s) => [s.id, s]),
+  );
+  return ((apptRes.data ?? []) as Array<{ id: string; service_id: string | null; starts_at: string }>).map((r) => {
+    const svc = r.service_id ? byId.get(r.service_id) : undefined;
+    return { id: r.id, serviceNameEn: svc?.name_en ?? null, serviceNameAr: svc?.name_ar ?? null, startIso: r.starts_at };
+  });
+}
+
+/** Cancel one appointment by id (agent-initiated). Returns true on success. */
+export async function cancelAppointmentById(
+  appointmentId: string,
+  clinicId: string,
+  owner: string,
+): Promise<boolean> {
+  const db = getSupabaseServiceClient();
+  if (!db) return false;
+  const { error } = await db
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .eq("owner_id", owner)
+    .eq("status", "booked");
+  return !error;
+}
+
 /**
  * Insert a booked appointment. The DB exclusion constraint is the race-safe
  * lock: a colliding insert raises 23P01, which we surface as `conflict` so the
@@ -304,6 +351,35 @@ export async function getAllAppointmentsFull(
       source: r.source,
     };
   });
+}
+
+/** Contact + summary info for an appointment — used to notify the patient on WhatsApp. */
+export async function getAppointmentNotifyInfo(
+  appointmentId: string,
+  clinicId: string,
+  owner: string,
+): Promise<{ patientPhone: string | null; startIso: string; serviceNameAr: string | null } | null> {
+  const db = getSupabaseServiceClient();
+  if (!db) return null;
+  const { data } = await db
+    .from("appointments")
+    .select("patient_phone, starts_at, service_id")
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .eq("owner_id", owner)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as { patient_phone: string | null; starts_at: string; service_id: string | null };
+  let serviceNameAr: string | null = null;
+  if (row.service_id) {
+    const { data: svc } = await db
+      .from("clinic_services")
+      .select("name_ar")
+      .eq("id", row.service_id)
+      .maybeSingle();
+    serviceNameAr = (svc as { name_ar?: string } | null)?.name_ar ?? null;
+  }
+  return { patientPhone: row.patient_phone, startIso: row.starts_at, serviceNameAr };
 }
 
 export async function setAppointmentStatus(

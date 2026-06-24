@@ -98,6 +98,7 @@ async function processMessage({
       locale: "ar",
       turns,
       owner,
+      patientPhone: from,
     });
     reply = result.reply;
     await saveSession(ctx.clinic.id, owner, from, [
