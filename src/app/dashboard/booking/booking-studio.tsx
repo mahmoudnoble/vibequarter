@@ -106,7 +106,7 @@ export function BookingStudio({
       )}
 
       {activeTab === "appointments" && (
-        <AppointmentsPanel initialAppointments={appointments} />
+        <AppointmentsPanel initialAppointments={appointments} timezone={timezone} />
       )}
 
       {activeTab === "patients" && <PatientsPanel patients={initialPatients} />}

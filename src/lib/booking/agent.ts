@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { ClaudeModel, Locale } from "@/lib/plans";
-import { computeAvailability, checkSlot } from "./availability";
+import { computeAvailability, checkSlot, zonedWallToUtc } from "./availability";
 import { getUpcomingAppointments, insertBookedAppointment } from "./clinic";
 import type { AppointmentRow, ChatTurn, ClinicContext, ServiceRow } from "./types";
 
@@ -36,16 +36,17 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "book_appointment",
     description:
-      "Book one appointment. Only call after you have the patient's full name, phone number, the chosen service, and a specific start time that came from check_availability — and after the patient confirmed. The `start` MUST be an exact `start` value returned by check_availability.",
+      "Book one appointment. Only call after you have the patient's full name, phone number, the chosen service, and a specific time the patient agreed to that came from check_availability. Pass the `date` and `time` EXACTLY as check_availability returned them — they are clinic-local; never convert to UTC or compute the time yourself.",
     input_schema: {
       type: "object",
       properties: {
         patient_name: { type: "string", description: "Patient's full name." },
         patient_phone: { type: "string", description: "Patient's phone number." },
         service: { type: "string", description: "The chosen service (name or id)." },
-        start: { type: "string", description: "Exact ISO start time from check_availability (e.g. 2026-06-24T13:00:00.000Z)." },
+        date: { type: "string", description: "Chosen day as YYYY-MM-DD (clinic-local) — exactly the `date` from check_availability." },
+        time: { type: "string", description: 'Chosen start time as HH:MM 24-hour clinic-local — exactly the `time` from check_availability (e.g. "13:30").' },
       },
-      required: ["patient_name", "patient_phone", "service", "start"],
+      required: ["patient_name", "patient_phone", "service", "date", "time"],
     },
   },
 ];
@@ -131,7 +132,7 @@ ${servicesList(ctx)}
 - Working hours (clinic local time):
 ${hoursSummary(ctx)}
 
-When you show times to the patient, present them in clean clinic-local time (e.g. "Tuesday 4:00 PM"). When you call a tool, pass the exact ids/ISO values you were given.`;
+When you show times to the patient, present them in clean clinic-local time (e.g. "Tuesday 4:00 PM"). All times are clinic-local. When you call a tool, pass the exact ids, dates and times you were given — never convert to UTC or compute a time yourself.`;
 }
 
 /**
@@ -192,15 +193,24 @@ export async function runBookingAgent(opts: {
       const svc = resolveService(ctx, input.service as string | undefined);
       const patientName = String(input.patient_name ?? "").trim();
       const patientPhone = String(input.patient_phone ?? "").trim();
-      const startIso = String(input.start ?? "").trim();
+      const dateStr = String(input.date ?? "").trim();
+      const timeStr = String(input.time ?? "").trim();
       const missing: string[] = [];
       if (!patientName) missing.push("patient_name");
       if (!patientPhone) missing.push("patient_phone");
       if (!svc) missing.push("service");
-      if (!startIso) missing.push("start");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) missing.push("date");
+      if (!/^\d{1,2}:\d{2}$/.test(timeStr)) missing.push("time");
       if (missing.length > 0) {
         return JSON.stringify({ booked: false, error: "need_info", missing });
       }
+
+      // The agent passes clinic-LOCAL date + time; convert to the UTC instant
+      // here so the model never does timezone math (which it gets wrong).
+      const tz = ctx.clinic.timezone || "Asia/Riyadh";
+      const [yy, mm, dd] = dateStr.split("-").map(Number);
+      const [hh, mi] = timeStr.split(":").map(Number);
+      const startIso = zonedWallToUtc(yy, mm, dd, hh, mi, tz).toISOString();
 
       const durationMin = svc!.duration_min;
       const slot = checkSlot({ ctx, booked, startIso, durationMin, now });

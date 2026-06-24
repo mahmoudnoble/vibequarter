@@ -12,8 +12,10 @@ const ALL_STATUSES: Status[] = ["booked", "cancelled", "completed", "no_show"];
 
 export function AppointmentsPanel({
   initialAppointments,
+  timezone,
 }: {
   initialAppointments: AppointmentFull[];
+  timezone: string;
 }) {
   const { t, locale } = useLanguage();
   const at = t.dashboard.booking.apptTab;
@@ -23,7 +25,10 @@ export function AppointmentsPanel({
   const [filter, setFilter] = useState<Status | "all">("all");
   const [actioning, setActioning] = useState<string | null>(null);
 
+  // Format in the CLINIC's timezone (not the viewer's browser) so the time
+  // always matches what the patient booked.
   const dateFmt = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-US", {
+    timeZone: timezone,
     weekday: "short",
     day: "numeric",
     month: "short",
