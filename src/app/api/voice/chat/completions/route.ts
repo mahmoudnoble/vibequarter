@@ -70,6 +70,9 @@ export async function POST(req: Request) {
     return streamCompletion(`السلام عليكم، ${ctx.clinic.name?.trim() || "العيادة"} معك، كيف أقدر أساعدك؟`);
   }
 
+  // Log the STT transcript so we can judge Gulf-Arabic recognition quality.
+  console.log(`[voice] heard: ${turns[turns.length - 1].content.slice(0, 160)}`);
+
   let reply = "";
   try {
     const result = await runBookingAgent({

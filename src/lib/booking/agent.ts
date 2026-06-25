@@ -227,6 +227,11 @@ export async function runBookingAgent(opts: {
     content: t.content,
   }));
   const system = buildSystemPrompt(ctx, opts.locale, now, patientAppts, opts.patientPhone);
+  // Cache the (large) system prompt so each turn — and each tool round within a
+  // turn — skips re-processing it. Big latency win for the voice channel.
+  const systemParam: Anthropic.TextBlockParam[] = [
+    { type: "text", text: system, cache_control: { type: "ephemeral" } },
+  ];
 
   async function runTool(name: string, input: Record<string, unknown>): Promise<string> {
     console.log(`[booking-tool] call ${name} ${JSON.stringify(input).slice(0, 250)}`);
@@ -355,7 +360,7 @@ export async function runBookingAgent(opts: {
   let response = await client.messages.create({
     model: opts.model,
     max_tokens: MAX_TOKENS,
-    system,
+    system: systemParam,
     tools: TOOLS,
     messages,
   });
@@ -378,7 +383,7 @@ export async function runBookingAgent(opts: {
     response = await client.messages.create({
       model: opts.model,
       max_tokens: MAX_TOKENS,
-      system,
+      system: systemParam,
       tools: TOOLS,
       messages,
     });
