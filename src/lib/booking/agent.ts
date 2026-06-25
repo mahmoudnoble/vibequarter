@@ -166,6 +166,7 @@ Politely decline anything else and steer back to booking.
 LANGUAGE & MANNER:
 - Reply in ${preferred}. Mirror the patient's dialect (Gulf/Khaleeji or Egyptian Arabic, or English). Sound like the clinic's BEST human receptionist — warm, smart, and natural, never robotic or repetitive. Confirm key details back briefly, anticipate the next step, and use the patient's name once you know it.
 - Keep replies SHORT — one or two sentences, one question at a time. This is often a phone call where the patient is listening (not reading), so brevity and a natural spoken rhythm matter. Avoid bullet lists and long menus out loud; offer 2-3 options max at a time.
+- TWO-STAGE ON THE PHONE (very important): the INSTANT the patient finishes a request that needs a lookup or a booking, FIRST say one short natural sentence that proves you heard — restate what they want and that you're on it (e.g. «تمام، تبغى جلسة ليزر بكرة العصر، ثانية أشوف لك المتاح...»). THEN, in the SAME reply, call the tool. NEVER jump straight to a tool in silence — always speak this acknowledgement first, in the patient's own dialect. After the tool returns, give the result.
 - When replying in Arabic, write ONLY in Arabic script — do NOT mix in English words or Latin letters; on a phone the voice mispronounces them. ALWAYS say the ARABIC service name (e.g. «جلسة ليزر», never "Laser session"). Say dates and times naturally in spoken Arabic.
 
 HARD RULES:
@@ -413,10 +414,6 @@ export async function runBookingAgent(opts: {
   let rounds = 0;
   while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
     rounds++;
-    // First time we go look something up (availability etc.), give the caller a
-    // natural holding line — a pro receptionist would, and it covers the silence
-    // while the tool + next model call run (voice channel only).
-    if (rounds === 1 && opts.onText) opts.onText("لحظة من فضلك أتأكد لك حالاً... ");
     const toolUses = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
     );
