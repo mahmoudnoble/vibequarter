@@ -1,8 +1,12 @@
 import { randomUUID } from "crypto";
+import Anthropic from "@anthropic-ai/sdk";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { ensureClinicContext } from "@/lib/booking/clinic";
 import { runBookingAgent } from "@/lib/booking/agent";
 import type { ChatTurn } from "@/lib/booking/types";
+
+const ACK_SYSTEM =
+  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short sentence, in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything), that shows you heard and are on it — briefly restate their request. Do NOT answer, list options, ask anything, or book. Examples: «تمام، تبغى موعد ليزر، ثانية أشوف لك» / «حاضر يا فندم، لحظة أراجع لك المواعيد» / 'sure, one moment while I check'.";
 
 /**
  * Voice channel — Vapi "Custom LLM" endpoint (OpenAI-compatible /chat/completions).
@@ -104,9 +108,27 @@ export async function POST(req: Request) {
         controller.enqueue(enc.encode(chunk({ content: text }, null)));
       };
       try {
+        // STAGE 1 — instant acknowledgement (fast Haiku), streamed first so the
+        // caller is reassured the MOMENT they finish, BEFORE the slower booking
+        // work runs. Restates their request in their own language/dialect.
+        try {
+          const ack = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.stream({
+            model: "claude-haiku-4-5",
+            max_tokens: 40,
+            system: ACK_SYSTEM,
+            messages: [{ role: "user", content: turns[turns.length - 1].content }],
+          });
+          ack.on("text", (d) => push(d));
+          await ack.finalMessage();
+          push(" ");
+        } catch (e) {
+          console.error("[voice] ack failed:", e);
+        }
+
+        // STAGE 2 — the real booking agent (checks availability, books, etc.).
         const result = await runBookingAgent({
           ctx,
-          model: "claude-sonnet-4-6", // quality matters; latency handled by streaming
+          model: "claude-sonnet-4-6", // quality; perceived latency covered by stage 1 + streaming
           locale: "ar",
           turns,
           owner,
