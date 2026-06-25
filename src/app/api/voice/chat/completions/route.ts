@@ -73,27 +73,60 @@ export async function POST(req: Request) {
   // Log the STT transcript so we can judge Gulf-Arabic recognition quality.
   console.log(`[voice] heard: ${turns[turns.length - 1].content.slice(0, 160)}`);
 
-  let reply = "";
-  try {
-    const result = await runBookingAgent({
-      ctx,
-      // Sonnet — Haiku was too weak for the booking conversation (kept re-listing
-      // times instead of booking the chosen one). Voice keeps Sonnet for quality;
-      // latency is tuned at the STT/TTS/orchestration layer, not by downgrading.
-      model: "claude-sonnet-4-6",
-      locale: "ar",
-      turns,
-      owner,
-      patientPhone,
-    });
-    reply = result.reply || "تمام.";
-    console.log(`[voice] turn ok caller=${patientPhone ?? "?"} replyLen=${reply.length}`);
-  } catch (err) {
-    console.error("[voice] agent error:", err);
-    reply = "عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟";
-  }
+  // Stream the agent's reply token-by-token (OpenAI chunks) so Vapi's TTS starts
+  // speaking as soon as the first words generate — the big perceived-latency win.
+  const id = `chatcmpl-${randomUUID()}`;
+  const created = Math.floor(Date.now() / 1000);
+  const enc = new TextEncoder();
+  const chunk = (delta: object, finish: string | null) =>
+    `data: ${JSON.stringify({
+      id,
+      object: "chat.completion.chunk",
+      created,
+      model: "hodoor-voice",
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    })}\n\n`;
 
-  return streamCompletion(reply);
+  const body = new ReadableStream({
+    async start(controller) {
+      let started = false;
+      const push = (text: string) => {
+        if (!text) return;
+        if (!started) {
+          controller.enqueue(enc.encode(chunk({ role: "assistant" }, null)));
+          started = true;
+        }
+        controller.enqueue(enc.encode(chunk({ content: text }, null)));
+      };
+      try {
+        const result = await runBookingAgent({
+          ctx,
+          model: "claude-sonnet-4-6", // quality matters; latency handled by streaming
+          locale: "ar",
+          turns,
+          owner,
+          patientPhone,
+          onText: push,
+        });
+        if (!started) push(result.reply || "تمام.");
+        console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
+      } catch (err) {
+        console.error("[voice] agent error:", err);
+        if (!started) push("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
+      }
+      controller.enqueue(enc.encode(chunk({}, "stop")));
+      controller.enqueue(enc.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

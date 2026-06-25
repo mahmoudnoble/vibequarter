@@ -210,6 +210,9 @@ export async function runBookingAgent(opts: {
   owner: string;
   patientPhone?: string;
   now?: Date;
+  // Voice channel passes this to stream the reply token-by-token so TTS can
+  // start speaking immediately instead of waiting for the full response.
+  onText?: (delta: string) => void;
 }): Promise<AgentResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
@@ -218,15 +221,15 @@ export async function runBookingAgent(opts: {
   const { ctx, owner } = opts;
   const client = new Anthropic({ apiKey });
 
-  // Ground availability on the current bookings; refresh after a booking lands.
-  let booked: AppointmentRow[] = await getUpcomingAppointments(ctx.clinic.id, owner);
+  // Ground availability + load this patient's own appointments in parallel
+  // (both feed the first turn) — saves a round-trip on every reply.
+  let [booked, patientAppts] = await Promise.all([
+    getUpcomingAppointments(ctx.clinic.id, owner),
+    opts.patientPhone
+      ? getPatientUpcomingAppointments(ctx.clinic.id, owner, opts.patientPhone)
+      : Promise.resolve([] as Awaited<ReturnType<typeof getPatientUpcomingAppointments>>),
+  ]);
   let bookedEvent: AgentResult["booked"] = null;
-
-  // This patient's own upcoming appointments — lets the agent reschedule/cancel
-  // their existing booking instead of stacking a duplicate.
-  let patientAppts = opts.patientPhone
-    ? await getPatientUpcomingAppointments(ctx.clinic.id, owner, opts.patientPhone)
-    : [];
 
   const messages: Anthropic.MessageParam[] = opts.turns.map((t) => ({
     role: t.role,
@@ -388,13 +391,24 @@ export async function runBookingAgent(opts: {
     return JSON.stringify({ error: "unknown_tool" });
   }
 
-  let response = await client.messages.create({
-    model: opts.model,
-    max_tokens: MAX_TOKENS,
-    system: systemParam,
-    tools: TOOLS,
-    messages,
-  });
+  // One model call. When onText is set (voice), stream so text deltas reach the
+  // caller as they generate; otherwise a plain create. Tool-use rounds emit no
+  // text, so deltas only fire on the final reply-producing call.
+  const callModel = async (): Promise<Anthropic.Message> => {
+    const params: Anthropic.MessageCreateParamsNonStreaming = {
+      model: opts.model,
+      max_tokens: MAX_TOKENS,
+      system: systemParam,
+      tools: TOOLS,
+      messages,
+    };
+    if (!opts.onText) return client.messages.create(params);
+    const s = client.messages.stream(params);
+    s.on("text", (delta) => opts.onText!(delta));
+    return s.finalMessage();
+  };
+
+  let response = await callModel();
 
   let rounds = 0;
   while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
@@ -411,13 +425,7 @@ export async function runBookingAgent(opts: {
     );
     messages.push({ role: "assistant", content: response.content });
     messages.push({ role: "user", content: results });
-    response = await client.messages.create({
-      model: opts.model,
-      max_tokens: MAX_TOKENS,
-      system: systemParam,
-      tools: TOOLS,
-      messages,
-    });
+    response = await callModel();
   }
 
   const reply = response.content
