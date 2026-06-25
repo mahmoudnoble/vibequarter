@@ -413,6 +413,10 @@ export async function runBookingAgent(opts: {
   let rounds = 0;
   while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
     rounds++;
+    // First time we go look something up (availability etc.), give the caller a
+    // natural holding line — a pro receptionist would, and it covers the silence
+    // while the tool + next model call run (voice channel only).
+    if (rounds === 1 && opts.onText) opts.onText("لحظة من فضلك أتأكد لك حالاً... ");
     const toolUses = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
     );

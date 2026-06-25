@@ -65,9 +65,14 @@ export async function POST(req: Request) {
     .map((m) => ({ role: m.role as "user" | "assistant", content: textOf(m.content).trim() }))
     .filter((t) => t.content);
 
-  if (turns.length === 0 || turns[turns.length - 1].role !== "user") {
-    // Opening line when the call connects before the caller speaks.
+  // Greet ONCE, only at the very start of the call. For any other request that
+  // doesn't end with a fresh patient utterance (Vapi pings / silence), stay
+  // silent — re-greeting on every such call was the repetition bug.
+  if (turns.length === 0) {
     return streamCompletion(`السلام عليكم، ${ctx.clinic.name?.trim() || "العيادة"} معك، كيف أقدر أساعدك؟`);
+  }
+  if (turns[turns.length - 1].role !== "user") {
+    return streamCompletion("");
   }
 
   // Log the STT transcript so we can judge Gulf-Arabic recognition quality.
@@ -174,7 +179,7 @@ function streamCompletion(text: string): Response {
 
   const stream = new ReadableStream({
     start(controller) {
-      controller.enqueue(enc.encode(chunk({ role: "assistant", content: text }, null)));
+      if (text) controller.enqueue(enc.encode(chunk({ role: "assistant", content: text }, null)));
       controller.enqueue(enc.encode(chunk({}, "stop")));
       controller.enqueue(enc.encode("data: [DONE]\n\n"));
       controller.close();
