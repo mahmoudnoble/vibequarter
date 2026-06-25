@@ -8,6 +8,7 @@ import {
   getPatientUpcomingAppointments,
   cancelAppointmentById,
 } from "./clinic";
+import { sendText } from "@/lib/whatsapp/client";
 import type { AppointmentRow, ChatTurn, ClinicContext, ServiceRow } from "./types";
 
 export type AgentResult = {
@@ -50,6 +51,7 @@ const TOOLS: Anthropic.Tool[] = [
         service: { type: "string", description: "The chosen service (name or id)." },
         date: { type: "string", description: "Chosen day as YYYY-MM-DD (clinic-local) — exactly the `date` from check_availability." },
         time: { type: "string", description: 'Chosen start time as HH:MM 24-hour clinic-local — exactly the `time` from check_availability (e.g. "13:30").' },
+        whatsapp_number: { type: "string", description: "The patient's WhatsApp number for the confirmation message, digits with country code. If they say it's the same number they're calling/messaging from, pass that number. Omit only if they refuse." },
       },
       required: ["patient_name", "patient_phone", "service", "date", "time"],
     },
@@ -161,14 +163,16 @@ YOUR JOB — strictly limited to:
 - Answering basic questions about the clinic's services, prices (only those listed below), working hours, and how booking works.
 Politely decline anything else and steer back to booking.
 
-LANGUAGE:
-- Reply in ${preferred}. Mirror the patient's dialect (Egyptian or Gulf Arabic, or English). Be warm, brief, and natural — like a friendly clinic receptionist, not a robot. Short messages, one question at a time.
+LANGUAGE & MANNER:
+- Reply in ${preferred}. Mirror the patient's dialect (Gulf/Khaleeji or Egyptian Arabic, or English). Sound like the clinic's BEST human receptionist — warm, smart, and natural, never robotic or repetitive. Confirm key details back briefly, anticipate the next step, and use the patient's name once you know it.
+- Keep replies SHORT — one or two sentences, one question at a time. This is often a phone call where the patient is listening (not reading), so brevity and a natural spoken rhythm matter. Avoid bullet lists and long menus out loud; offer 2-3 options max at a time.
 
 HARD RULES:
 - NEVER invent services, prices, available times, or appointments. Only mention services from the list. Only offer times returned by check_availability. Only mention appointments listed under THIS PATIENT below — never make up appointments the patient has.
 - Always call check_availability before proposing or confirming any time. If the patient names a day, check that day.
 - To book you MUST have: the chosen service, the patient's full name, and a specific time they agreed to. The patient's phone is already known (their WhatsApp number, below) — use it; do NOT ask for it.
 - Only claim an appointment is booked AFTER book_appointment returns booked:true. If it returns a conflict, apologise and offer another time from a fresh check_availability.
+- WHATSAPP CONFIRMATION: a confirmation is sent to the patient on WhatsApp after every booking. Naturally ask which WhatsApp number to send it to. If the patient says "same as this number" / "the number I'm calling from", use their phone (under THIS PATIENT below) — don't make them repeat it. Pass it as whatsapp_number to book_appointment, and tell them "بنرسل لك التأكيد على واتساب".
 - The ONLY appointments this patient has are the numbered ones under THIS PATIENT below. If that list says "(none)", the patient has NO appointment — to reschedule or cancel, tell them they have nothing booked and offer to book a new one. NEVER invent an appointment or an appointment number.
 - RESCHEDULING (the patient has an appointment and wants a different time): this is NOT a second booking. FIRST call cancel_appointment with that appointment's NUMBER from the list, THEN book_appointment the new time. Never leave the patient holding two appointments for the same visit.
 - CANCELLING: call cancel_appointment with the appointment's NUMBER from the list, then confirm it's cancelled. After cancelling, that appointment no longer exists — do not refer to it as active.
@@ -322,6 +326,31 @@ export async function runBookingAgent(opts: {
       if (opts.patientPhone) {
         patientAppts = await getPatientUpcomingAppointments(ctx.clinic.id, owner, opts.patientPhone);
       }
+
+      // WhatsApp confirmation — to the number the patient chose (defaults to the
+      // contact phone, i.e. the number they're calling/messaging from). Free-form
+      // delivers within the 24h window; production needs an approved template.
+      const waNumber =
+        String(input.whatsapp_number ?? "").replace(/[^0-9]/g, "") ||
+        patientPhone.replace(/[^0-9]/g, "");
+      if (waNumber && ctx.clinic.whatsapp_phone_number_id) {
+        const when = new Intl.DateTimeFormat("ar-SA", {
+          timeZone: ctx.clinic.timezone || "Asia/Riyadh",
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(startIso));
+        const body = `✅ تم تأكيد موعدك في ${ctx.clinic.name?.trim() || "العيادة"}\n${svc!.name_ar} — ${when}\nنتشرف بزيارتك 🌟`;
+        try {
+          await sendText(waNumber, body, ctx.clinic.whatsapp_phone_number_id);
+          console.log(`[booking-tool] confirm sent to ${waNumber}`);
+        } catch (e) {
+          console.error("[booking-tool] confirm-send failed:", e);
+        }
+      }
+
       bookedEvent = { patientName, serviceName: svc!.name_en, startIso };
       return JSON.stringify({
         booked: true,
