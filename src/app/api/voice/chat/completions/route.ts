@@ -77,10 +77,10 @@ export async function POST(req: Request) {
   try {
     const result = await runBookingAgent({
       ctx,
-      // Voice prioritizes LATENCY → Haiku (2-3x faster than Sonnet). The booking
-      // discipline now holds on Haiku thanks to numbered refs + patient-awareness
-      // + strict prompt rules. WhatsApp stays on Sonnet (latency doesn't matter there).
-      model: "claude-haiku-4-5",
+      // Sonnet — Haiku was too weak for the booking conversation (kept re-listing
+      // times instead of booking the chosen one). Voice keeps Sonnet for quality;
+      // latency is tuned at the STT/TTS/orchestration layer, not by downgrading.
+      model: "claude-sonnet-4-6",
       locale: "ar",
       turns,
       owner,
