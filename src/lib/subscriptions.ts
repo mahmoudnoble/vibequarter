@@ -1,10 +1,10 @@
 import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { normalizeModel, DEFAULT_MODEL, type ClaudeModel } from "@/lib/plans";
+import { normalizeModel, DEFAULT_MODEL, type AppModel } from "@/lib/plans";
 
 export type PlanCapabilities = {
-  /** Claude model tier the builder agent uses. */
-  model: ClaudeModel;
+  /** Model tier the agent uses. */
+  model: AppModel;
   /** Whether this tenant's plan may generate images with GPT Image. */
   imageGen: boolean;
 };
@@ -43,6 +43,6 @@ export async function getPlanCapabilitiesForOwner(
 type PlanRel = { model?: string; image_gen?: boolean };
 
 /** Convenience: just the model tier (used by the AI agent routes). */
-export async function getActiveModelForOwner(owner: string | null | undefined): Promise<ClaudeModel> {
+export async function getActiveModelForOwner(owner: string | null | undefined): Promise<AppModel> {
   return (await getPlanCapabilitiesForOwner(owner)).model;
 }

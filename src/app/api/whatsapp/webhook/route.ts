@@ -91,10 +91,9 @@ async function processMessage({
   try {
     const result = await runBookingAgent({
       ctx,
-      // Sonnet (not Haiku) for the live WhatsApp agent: booking is a critical
-      // flow and needs strict tool discipline — never claim "booked" unless
-      // book_appointment actually returned booked:true.
-      model: "claude-sonnet-4-6",
+      // Brain runs on OpenAI (OPENAI_BOOKING_MODEL, gpt-4o by default) — booking
+      // is a critical flow needing strict tool discipline; never claim "booked"
+      // unless book_appointment actually returned booked:true.
       locale: "ar",
       turns,
       owner,

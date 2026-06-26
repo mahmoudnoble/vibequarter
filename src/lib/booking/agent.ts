@@ -1,6 +1,6 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import type { ClaudeModel, Locale } from "@/lib/plans";
+import { chatCompletion, type ChatMessage, type ToolDef } from "@/lib/llm/openai";
+import type { Locale } from "@/lib/plans";
 import { computeAvailability, checkSlot, zonedWallToUtc } from "./availability";
 import {
   getUpcomingAppointments,
@@ -18,57 +18,67 @@ export type AgentResult = {
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_TOKENS = 1024;
+const DEFAULT_MODEL = process.env.OPENAI_BOOKING_MODEL || "gpt-4o";
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const TOOLS: Anthropic.Tool[] = [
+const TOOLS: ToolDef[] = [
   {
-    name: "check_availability",
-    description:
-      "Get real, bookable appointment times for this clinic. Always call this before offering or confirming any time — never invent availability. Returns times grouped by day in the clinic timezone.",
-    input_schema: {
-      type: "object",
-      properties: {
-        service: {
-          type: "string",
-          description: "The service the patient wants (name or id from the services list). Sets the slot length.",
-        },
-        date: {
-          type: "string",
-          description: "Optional specific day to check, formatted YYYY-MM-DD (clinic-local). Omit to see the next available days.",
+    type: "function",
+    function: {
+      name: "check_availability",
+      description:
+        "Get real, bookable appointment times for this clinic. Always call this before offering or confirming any time — never invent availability. Returns times grouped by day in the clinic timezone.",
+      parameters: {
+        type: "object",
+        properties: {
+          service: {
+            type: "string",
+            description: "The service the patient wants (name or id from the services list). Sets the slot length.",
+          },
+          date: {
+            type: "string",
+            description: "Optional specific day to check, formatted YYYY-MM-DD (clinic-local). Omit to see the next available days.",
+          },
         },
       },
     },
   },
   {
-    name: "book_appointment",
-    description:
-      "Book one appointment. Only call after you have the patient's full name, phone number, the chosen service, and a specific time the patient agreed to that came from check_availability. Pass the `date` and `time` EXACTLY as check_availability returned them — they are clinic-local; never convert to UTC or compute the time yourself.",
-    input_schema: {
-      type: "object",
-      properties: {
-        patient_name: { type: "string", description: "Patient's full name." },
-        patient_phone: { type: "string", description: "Patient's phone number." },
-        service: { type: "string", description: "The chosen service (name or id)." },
-        date: { type: "string", description: "Chosen day as YYYY-MM-DD (clinic-local) — exactly the `date` from check_availability." },
-        time: { type: "string", description: 'Chosen start time as HH:MM 24-hour clinic-local — exactly the `time` from check_availability (e.g. "13:30").' },
-        whatsapp_number: { type: "string", description: "The patient's WhatsApp number for the confirmation message, digits with country code. If they say it's the same number they're calling/messaging from, pass that number. Omit only if they refuse." },
+    type: "function",
+    function: {
+      name: "book_appointment",
+      description:
+        "Book one appointment. Only call after you have the patient's full name, phone number, the chosen service, and a specific time the patient agreed to that came from check_availability. Pass the `date` and `time` EXACTLY as check_availability returned them — they are clinic-local; never convert to UTC or compute the time yourself.",
+      parameters: {
+        type: "object",
+        properties: {
+          patient_name: { type: "string", description: "Patient's full name." },
+          patient_phone: { type: "string", description: "Patient's phone number." },
+          service: { type: "string", description: "The chosen service (name or id)." },
+          date: { type: "string", description: "Chosen day as YYYY-MM-DD (clinic-local) — exactly the `date` from check_availability." },
+          time: { type: "string", description: 'Chosen start time as HH:MM 24-hour clinic-local — exactly the `time` from check_availability (e.g. "13:30").' },
+          whatsapp_number: { type: "string", description: "The patient's WhatsApp number for the confirmation message, digits with country code. If they say it's the same number they're calling/messaging from, pass that number. Omit only if they refuse." },
+        },
+        required: ["patient_name", "patient_phone", "service", "date", "time"],
       },
-      required: ["patient_name", "patient_phone", "service", "date", "time"],
     },
   },
   {
-    name: "cancel_appointment",
-    description:
-      "Cancel one of THIS patient's existing booked appointments, identified by its NUMBER in the patient's appointments list. Use it when the patient asks to cancel, and as the FIRST step of a reschedule (cancel the old one, then book_appointment the new time). Only use a number that appears in the list — never invent one.",
-    input_schema: {
-      type: "object",
-      properties: {
-        appointment_number: {
-          type: "integer",
-          description: "The number (1, 2, …) of the appointment from the patient's appointments list in the system prompt.",
+    type: "function",
+    function: {
+      name: "cancel_appointment",
+      description:
+        "Cancel one of THIS patient's existing booked appointments, identified by its NUMBER in the patient's appointments list. Use it when the patient asks to cancel, and as the FIRST step of a reschedule (cancel the old one, then book_appointment the new time). Only use a number that appears in the list — never invent one.",
+      parameters: {
+        type: "object",
+        properties: {
+          appointment_number: {
+            type: "integer",
+            description: "The number (1, 2, …) of the appointment from the patient's appointments list in the system prompt.",
+          },
         },
+        required: ["appointment_number"],
       },
-      required: ["appointment_number"],
     },
   },
 ];
@@ -201,11 +211,12 @@ When you show times to the patient, present them in clean clinic-local time (e.g
 /**
  * Run one assistant turn of the booking agent: the model reasons over the chat
  * so far, calls tools (grounded availability + atomic booking) as needed, and
- * returns its final text plus a booking event when one was committed.
+ * returns its final text plus a booking event when one was committed. Runs on
+ * OpenAI (gpt-4o by default) — same brain across WhatsApp + Voice.
  */
 export async function runBookingAgent(opts: {
   ctx: ClinicContext;
-  model: ClaudeModel;
+  model?: string;
   locale: Locale;
   turns: ChatTurn[];
   owner: string;
@@ -215,12 +226,9 @@ export async function runBookingAgent(opts: {
   // start speaking immediately instead of waiting for the full response.
   onText?: (delta: string) => void;
 }): Promise<AgentResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-
   const now = opts.now ?? new Date();
   const { ctx, owner } = opts;
-  const client = new Anthropic({ apiKey });
+  const model = opts.model || DEFAULT_MODEL;
 
   // Ground availability + load this patient's own appointments in parallel
   // (both feed the first turn) — saves a round-trip on every reply.
@@ -232,15 +240,10 @@ export async function runBookingAgent(opts: {
   ]);
   let bookedEvent: AgentResult["booked"] = null;
 
-  const messages: Anthropic.MessageParam[] = opts.turns.map((t) => ({
-    role: t.role,
-    content: t.content,
-  }));
   const system = buildSystemPrompt(ctx, opts.locale, now, patientAppts, opts.patientPhone);
-  // Cache the (large) system prompt so each turn — and each tool round within a
-  // turn — skips re-processing it. Big latency win for the voice channel.
-  const systemParam: Anthropic.TextBlockParam[] = [
-    { type: "text", text: system, cache_control: { type: "ephemeral" } },
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    ...opts.turns.map((t) => ({ role: t.role, content: t.content }) as ChatMessage),
   ];
 
   async function runTool(name: string, input: Record<string, unknown>): Promise<string> {
@@ -392,48 +395,39 @@ export async function runBookingAgent(opts: {
     return JSON.stringify({ error: "unknown_tool" });
   }
 
-  // One model call. When onText is set (voice), stream so text deltas reach the
-  // caller as they generate; otherwise a plain create. Tool-use rounds emit no
-  // text, so deltas only fire on the final reply-producing call.
-  const callModel = async (): Promise<Anthropic.Message> => {
-    const params: Anthropic.MessageCreateParamsNonStreaming = {
-      model: opts.model,
-      max_tokens: MAX_TOKENS,
-      system: systemParam,
-      tools: TOOLS,
+  // One model call. When onText is set (voice), the call streams so text deltas
+  // reach the caller as they generate; tool-use rounds emit no text, so deltas
+  // only fire on the final reply-producing call.
+  const callModel = () =>
+    chatCompletion({
+      model,
       messages,
-    };
-    if (!opts.onText) return client.messages.create(params);
-    const s = client.messages.stream(params);
-    s.on("text", (delta) => opts.onText!(delta));
-    return s.finalMessage();
-  };
+      tools: TOOLS,
+      maxTokens: MAX_TOKENS,
+      temperature: 0.3,
+      onText: opts.onText,
+    });
 
-  let response = await callModel();
+  let result = await callModel();
 
   let rounds = 0;
-  while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
+  while (result.toolCalls.length > 0 && rounds < MAX_TOOL_ROUNDS) {
     rounds++;
-    const toolUses = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-    );
-    const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
-      toolUses.map(async (b) => ({
-        type: "tool_result" as const,
-        tool_use_id: b.id,
-        content: await runTool(b.name, (b.input ?? {}) as Record<string, unknown>),
-      })),
-    );
-    messages.push({ role: "assistant", content: response.content });
-    messages.push({ role: "user", content: results });
-    response = await callModel();
+    // Echo the assistant's tool-call message, then one tool result per call —
+    // OpenAI requires a `tool` message for every tool_call_id, in order.
+    messages.push({ role: "assistant", content: result.content || null, tool_calls: result.toolCalls });
+    for (const tc of result.toolCalls) {
+      let input: Record<string, unknown> = {};
+      try {
+        input = JSON.parse(tc.function.arguments || "{}");
+      } catch {
+        input = {};
+      }
+      const out = await runTool(tc.function.name, input);
+      messages.push({ role: "tool", tool_call_id: tc.id, content: out });
+    }
+    result = await callModel();
   }
 
-  const reply = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
-
-  return { reply, booked: bookedEvent };
+  return { reply: result.content.trim(), booked: bookedEvent };
 }

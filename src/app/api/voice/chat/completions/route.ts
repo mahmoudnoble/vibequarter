@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import Anthropic from "@anthropic-ai/sdk";
+import { chatCompletion } from "@/lib/llm/openai";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { ensureClinicContext } from "@/lib/booking/clinic";
 import { runBookingAgent } from "@/lib/booking/agent";
@@ -112,14 +112,15 @@ export async function POST(req: Request) {
         // caller is reassured the MOMENT they finish, BEFORE the slower booking
         // work runs. Restates their request in their own language/dialect.
         try {
-          const ack = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).messages.stream({
-            model: "claude-haiku-4-5",
-            max_tokens: 40,
-            system: ACK_SYSTEM,
-            messages: [{ role: "user", content: turns[turns.length - 1].content }],
+          await chatCompletion({
+            model: process.env.OPENAI_ACK_MODEL || "gpt-4o-mini",
+            maxTokens: 40,
+            messages: [
+              { role: "system", content: ACK_SYSTEM },
+              { role: "user", content: turns[turns.length - 1].content },
+            ],
+            onText: (d) => push(d),
           });
-          ack.on("text", (d) => push(d));
-          await ack.finalMessage();
           push(" ");
         } catch (e) {
           console.error("[voice] ack failed:", e);
@@ -128,8 +129,7 @@ export async function POST(req: Request) {
         // STAGE 2 — the real booking agent (checks availability, books, etc.).
         const result = await runBookingAgent({
           ctx,
-          model: "claude-sonnet-4-6", // quality; perceived latency covered by stage 1 + streaming
-          locale: "ar",
+          locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4o)
           turns,
           owner,
           patientPhone,

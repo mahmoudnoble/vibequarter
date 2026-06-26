@@ -12,7 +12,6 @@
     "sync": "node scripts/sync-clerk-supabase.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
     "@clerk/nextjs": "^6.9.6",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",

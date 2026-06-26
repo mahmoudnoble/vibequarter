@@ -37,7 +37,7 @@ function toForm(p?: Plan): FormState {
     slug: p?.slug ?? "",
     type: p?.type ?? "personal",
     max_members: String(p?.max_members ?? 1),
-    model: p?.model ?? "claude-haiku-4-5",
+    model: p?.model ?? "gpt-4o-mini",
     image_gen: p?.image_gen ?? false,
     price_monthly: p?.price_monthly?.toString() ?? "",
     price_yearly: p?.price_yearly?.toString() ?? "",
@@ -122,11 +122,10 @@ export function PlanForm({ plan }: { plan?: Plan }) {
           <input type="number" className={field} value={f.max_members} onChange={(e) => set("max_members", e.target.value)} />
         </div>
         <div>
-          <label className={label}>Claude model</label>
+          <label className={label}>Model</label>
           <select className={field} value={f.model} onChange={(e) => set("model", e.target.value)}>
-            <option value="claude-haiku-4-5">Haiku 4.5 (cheapest)</option>
-            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
-            <option value="claude-opus-4-8">Opus 4.8 (top)</option>
+            <option value="gpt-4o-mini">GPT-4o mini (cheapest)</option>
+            <option value="gpt-4o">GPT-4o (top)</option>
           </select>
         </div>
         <div>

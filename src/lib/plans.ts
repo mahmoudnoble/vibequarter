@@ -4,16 +4,16 @@ import { unstable_cache } from "next/cache";
 export type Locale = "en" | "ar";
 export type Bilingual = { en: string; ar: string };
 
-/** The three Claude model tiers a plan can map to (abstract ids — no date suffix). */
-export const CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8"] as const;
-export type ClaudeModel = (typeof CLAUDE_MODELS)[number];
-export const DEFAULT_MODEL: ClaudeModel = "claude-haiku-4-5";
+/** The model tiers a plan can map to (abstract ids). The app runs on OpenAI. */
+export const APP_MODELS = ["gpt-4o-mini", "gpt-4o"] as const;
+export type AppModel = (typeof APP_MODELS)[number];
+export const DEFAULT_MODEL: AppModel = "gpt-4o-mini";
 
-/** Coerce any stored/legacy model string to one of the three valid tiers. */
-export function normalizeModel(model: string | null | undefined): ClaudeModel {
+/** Coerce any stored/legacy model string (incl. old Claude ids) to a valid tier. */
+export function normalizeModel(model: string | null | undefined): AppModel {
   if (!model) return DEFAULT_MODEL;
-  if (model.startsWith("claude-opus")) return "claude-opus-4-8";
-  if (model.startsWith("claude-sonnet")) return "claude-sonnet-4-6";
+  // Top tier — and legacy Claude Opus/Sonnet rows — map to gpt-4o.
+  if (model === "gpt-4o" || model.startsWith("claude-opus") || model.startsWith("claude-sonnet")) return "gpt-4o";
   return DEFAULT_MODEL;
 }
 
