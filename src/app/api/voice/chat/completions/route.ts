@@ -136,9 +136,9 @@ export async function POST(req: Request) {
       // their own dialect, no greeting.
       try {
         await chatCompletion({
-          model: process.env.OPENAI_ACK_MODEL || "gpt-4o-mini",
+          model: process.env.OPENAI_ACK_MODEL || "gpt-4.1-mini",
           maxTokens: 30,
-          temperature: 0.4,
+          temperature: 0.2, // accurate restatement — must not misread the request
           messages: [
             { role: "system", content: ACK_SYSTEM },
             { role: "user", content: turns[turns.length - 1].content },
