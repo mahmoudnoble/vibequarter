@@ -42,12 +42,18 @@ export function GET() {
 }
 
 export async function POST(req: Request) {
-  // Optional shared secret. Set VAPI_TTS_SECRET in env and the same value as an
-  // `x-vapi-secret` header in Vapi's custom-voice server config. (Kept separate
-  // from the custom-LLM's VAPI_SECRET so enabling it can't break that route.)
+  // Optional shared secret. Accept it EITHER as an `x-vapi-secret` header OR as a
+  // `?key=` query param on the URL — because Vapi's custom-voice request does not
+  // carry the assistant's "Advanced > HTTP Headers", so the only reliable place
+  // to put the secret is in the Server URL itself. Kept separate from the
+  // custom-LLM's VAPI_SECRET so enabling it can't break that route.
   const secret = process.env.VAPI_TTS_SECRET;
-  if (secret && req.headers.get("x-vapi-secret") !== secret) {
-    return new Response("Forbidden", { status: 403 });
+  if (secret) {
+    const headerKey = req.headers.get("x-vapi-secret");
+    const queryKey = new URL(req.url).searchParams.get("key");
+    if (headerKey !== secret && queryKey !== secret) {
+      return new Response("Forbidden", { status: 403 });
+    }
   }
 
   const key = process.env.HAKIM_API_KEY;
