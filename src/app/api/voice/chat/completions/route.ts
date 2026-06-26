@@ -135,6 +135,8 @@ export async function POST(req: Request) {
       choices: [{ index: 0, delta, finish_reason: finish }],
     })}\n\n`;
 
+  // Aborts the agent's model calls if the caller hangs up mid-turn (stream cancel).
+  const ac = new AbortController();
   const body = new ReadableStream({
     async start(controller) {
       let started = false;
@@ -174,6 +176,7 @@ export async function POST(req: Request) {
             owner,
             patientPhone,
             spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
+            signal: ac.signal,
             onText: (t) => {
               if (t) {
                 agentSpoke = true;
@@ -191,10 +194,19 @@ export async function POST(req: Request) {
         console.error("[voice] stream fatal:", err);
         if (!started) enqueue("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
       } finally {
-        controller.enqueue(enc.encode(chunk({}, "stop")));
-        controller.enqueue(enc.encode("data: [DONE]\n\n"));
-        controller.close();
+        // Defensive: if the caller already hung up the stream is closed/errored,
+        // so finalizing it can throw — swallow that.
+        try {
+          controller.enqueue(enc.encode(chunk({}, "stop")));
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch {
+          /* stream already closed/cancelled */
+        }
       }
+    },
+    cancel() {
+      ac.abort();
     },
   });
 

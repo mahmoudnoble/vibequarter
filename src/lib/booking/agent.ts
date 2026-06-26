@@ -110,10 +110,10 @@ function toIntlPhone(phone: string, cc: string): string {
   let d = (phone || "").replace(/\D/g, "");
   if (!d) return "";
   if (d.startsWith("00")) d = d.slice(2); // 00966… → 966…
-  if (d.startsWith("0")) return cc + d.slice(1); // local 05… → 9665…
-  if (d.startsWith(cc)) return d; // already has this country code
-  if (d.length <= 9) return cc + d; // bare national number
-  return d; // assume already international (e.g. another country)
+  if (d.startsWith(cc)) return d; // already this country's E.164
+  if (d.startsWith("0")) return cc + d.slice(1); // local 05… → cc + 5…
+  if (d.length === 9 && d.startsWith("5")) return cc + d; // bare Gulf mobile (5xxxxxxxx)
+  return d; // otherwise assume it's already an international number — don't fabricate a cc
 }
 
 function resolveService(ctx: ClinicContext, query: string | undefined): ServiceRow | null {
@@ -259,6 +259,8 @@ export async function runBookingAgent(opts: {
   // Voice channel passes this to stream the reply token-by-token so TTS can
   // start speaking immediately instead of waiting for the full response.
   onText?: (delta: string) => void;
+  // Aborts the in-flight model calls when the caller hangs up mid-turn.
+  signal?: AbortSignal;
 }): Promise<AgentResult> {
   const now = opts.now ?? new Date();
   const { ctx, owner } = opts;
@@ -313,10 +315,6 @@ export async function runBookingAgent(opts: {
     if (name === "book_appointment") {
       const svc = resolveService(ctx, input.service as string | undefined);
       const patientName = String(input.patient_name ?? "").trim();
-      // The patient's contact number. A WhatsApp number the patient explicitly
-      // gave OVERWRITES the number they're calling from (they asked to be reached
-      // there); otherwise we use the caller's own number. This is what gets stored
-      // AND where the confirmation is sent.
       // The patient's number comes ONLY from the call (caller id) — never from the
       // model. Normalise to international digits so Meta accepts the WhatsApp send.
       // May be empty (e.g. a web test with no caller id) — that's fine; we still book.
@@ -457,6 +455,7 @@ export async function runBookingAgent(opts: {
       maxTokens: MAX_TOKENS,
       temperature: 0.2, // disciplined, low hallucination for a booking flow
       onText: opts.onText,
+      signal: opts.signal,
     });
 
   let result = await callModel();
@@ -480,5 +479,25 @@ export async function runBookingAgent(opts: {
     result = await callModel();
   }
 
-  return { reply: result.content.trim(), booked: bookedEvent };
+  let reply = result.content.trim();
+  if (!reply) {
+    // The loop exhausted its rounds still wanting tools (or returned no text) —
+    // force ONE more call WITHOUT tools so we never hand back a blank message.
+    try {
+      const finalMsg = await chatCompletion({
+        model,
+        messages,
+        maxTokens: MAX_TOKENS,
+        temperature: 0.2,
+        onText: opts.onText,
+        signal: opts.signal,
+      });
+      reply = finalMsg.content.trim();
+    } catch (e) {
+      console.error("[booking] final-reply call failed:", e);
+    }
+    if (!reply) reply = "تمام.";
+  }
+
+  return { reply, booked: bookedEvent };
 }
