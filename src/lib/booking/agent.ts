@@ -8,7 +8,7 @@ import {
   getPatientUpcomingAppointments,
   cancelAppointmentById,
 } from "./clinic";
-import { sendText } from "@/lib/whatsapp/client";
+import { sendTemplate } from "@/lib/whatsapp/client";
 import type { AppointmentRow, ChatTurn, ClinicContext, ServiceRow } from "./types";
 
 export type AgentResult = {
@@ -377,9 +377,10 @@ export async function runBookingAgent(opts: {
         patientAppts = await getPatientUpcomingAppointments(ctx.clinic.id, owner, patientPhone);
       }
 
-      // WhatsApp confirmation — sent to the stored contact (the WhatsApp number the
-      // patient gave, else the caller's). Free-form delivers within Meta's 24h
-      // window; production needs an approved template for cold sends.
+      // WhatsApp confirmation — sent to the caller's number via the APPROVED
+      // template `appointment_confirmation` (body vars: clinic name, service,
+      // date/time). A template delivers even outside Meta's 24h window. Empty
+      // waNumber (a call with no caller id) → skip silently.
       const waNumber = patientPhone;
       if (waNumber && ctx.clinic.whatsapp_phone_number_id) {
         const when = new Intl.DateTimeFormat("ar-SA", {
@@ -390,10 +391,15 @@ export async function runBookingAgent(opts: {
           hour: "numeric",
           minute: "2-digit",
         }).format(new Date(startIso));
-        const body = `✅ تم تأكيد موعدك في ${ctx.clinic.name?.trim() || "العيادة"}\n${svc!.name_ar} — ${when}\nنتشرف بزيارتك 🌟`;
         try {
-          await sendText(waNumber, body, ctx.clinic.whatsapp_phone_number_id);
-          console.log(`[booking-tool] confirm sent to ${waNumber}`);
+          await sendTemplate(
+            waNumber,
+            process.env.WHATSAPP_CONFIRM_TEMPLATE || "appointment_confirmation",
+            process.env.WHATSAPP_TEMPLATE_LANG || "ar",
+            [ctx.clinic.name?.trim() || "العيادة", svc!.name_ar, when],
+            ctx.clinic.whatsapp_phone_number_id,
+          );
+          console.log(`[booking-tool] confirm template sent to ${waNumber}`);
         } catch (e) {
           console.error("[booking-tool] confirm-send failed:", e);
         }

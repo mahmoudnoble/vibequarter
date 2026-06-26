@@ -56,6 +56,47 @@ export async function sendText(to: string, body: string, phoneNumberId?: string)
   console.log(`[whatsapp] accepted to=${to} id=${data?.messages?.[0]?.id ?? "?"}`);
 }
 
+/**
+ * Send an APPROVED WhatsApp message template (Meta Cloud API). Unlike free-form
+ * text, a template delivers even OUTSIDE the 24h window — the right way to send
+ * a booking confirmation to any patient. `bodyParams` fill the {{1}}, {{2}}, …
+ * placeholders in the template's body, in order.
+ */
+export async function sendTemplate(
+  to: string,
+  templateName: string,
+  languageCode: string,
+  bodyParams: string[],
+  phoneNumberId?: string,
+): Promise<void> {
+  const res = await fetch(endpoint(resolvePhoneNumberId(phoneNumberId)), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token()}`,
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: bodyParams.length
+          ? [{ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) }]
+          : [],
+      },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Meta WhatsApp template error ${res.status}: ${err}`);
+  }
+  const data = (await res.json().catch(() => null)) as { messages?: Array<{ id?: string }> } | null;
+  console.log(`[whatsapp] template '${templateName}' accepted to=${to} id=${data?.messages?.[0]?.id ?? "?"}`);
+}
+
 /** Mark an inbound message as read (double blue tick). Best-effort. */
 export async function markRead(messageId: string, phoneNumberId?: string): Promise<void> {
   const t = process.env.WHATSAPP_ACCESS_TOKEN;
