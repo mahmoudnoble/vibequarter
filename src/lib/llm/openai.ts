@@ -49,7 +49,13 @@ export async function chatCompletion(opts: {
     messages: opts.messages,
     max_tokens: opts.maxTokens ?? 1024,
   };
-  if (opts.tools?.length) body.tools = opts.tools;
+  if (opts.tools?.length) {
+    body.tools = opts.tools;
+    // Booking is sequential: the model must see each tool's result before the
+    // next call (e.g. book the new time, THEN cancel the old). Parallel calls in
+    // one turn would race the shared appointment list.
+    body.parallel_tool_calls = false;
+  }
   if (opts.temperature != null) body.temperature = opts.temperature;
   if (stream) body.stream = true;
 

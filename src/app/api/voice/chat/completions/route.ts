@@ -37,7 +37,8 @@ function extractPhoneFromTurns(turns: ChatTurn[]): string | undefined {
     if (turns[i].role !== "user") continue;
     // Join digits split by spaces/dashes ("973 3870 5548" → "97338705548").
     const joined = toLatinDigits(turns[i].content).replace(/(?<=\d)[\s-]+(?=\d)/g, "");
-    const runs = joined.match(/\d{7,15}/g);
+    // 9+ digits only — a real mobile number, not a spoken price/time/short id.
+    const runs = joined.match(/\d{9,15}/g);
     if (runs && runs.length) return runs[runs.length - 1];
   }
   return undefined;
@@ -105,9 +106,15 @@ export async function POST(req: Request) {
   }
 
   // Call-open greeting (no turns yet) — latency-tolerant; needs the clinic name.
+  // A DB blip must still greet (generic name), never 500 the call open.
   if (turns.length === 0) {
-    const o = await resolveVoiceOwner();
-    const c = o ? await ensureClinicContext(o) : null;
+    let c: Awaited<ReturnType<typeof ensureClinicContext>> = null;
+    try {
+      const o = await resolveVoiceOwner();
+      c = o ? await ensureClinicContext(o) : null;
+    } catch (e) {
+      console.error("[voice] greet resolve failed:", e);
+    }
     return streamCompletion(`السلام عليكم، ${c?.clinic.name?.trim() || "العيادة"} معك، كيف أقدر أساعدك؟`);
   }
 
@@ -139,52 +146,55 @@ export async function POST(req: Request) {
         }
         controller.enqueue(enc.encode(chunk({ content: text }, null)));
       };
+      // The finally ALWAYS finalizes the SSE stream — no DB blip or agent throw
+      // can leave a live call hanging with no [DONE].
+      try {
+        // 1) INSTANT filler — emitted with zero I/O so the caller hears a natural
+        //    "one moment" the millisecond they finish speaking (empty on closings).
+        const filler = instantFiller(turns[turns.length - 1].content, turns.length);
+        if (filler) enqueue(filler + " ");
 
-      // 1) INSTANT filler — emitted with zero I/O so the caller hears a natural
-      //    "one moment" the millisecond they finish speaking (empty on closings).
-      const filler = instantFiller(turns[turns.length - 1].content, turns.length);
-      if (filler) enqueue(filler + " ");
+        // 2) Resolve the clinic (DB) WHILE the filler audio plays — no lag.
+        const owner = await resolveVoiceOwner();
+        const ctx = owner ? await ensureClinicContext(owner) : null;
+        if (!owner || !ctx) {
+          console.warn("[voice] no clinic resolved");
+          enqueue("عذراً، الخدمة غير متاحة حالياً، حاول لاحقاً.");
+          return;
+        }
 
-      // 2) Resolve the clinic (DB) WHILE the filler audio plays — no lag.
-      const owner = await resolveVoiceOwner();
-      const ctx = owner ? await ensureClinicContext(owner) : null;
-      if (!owner || !ctx) {
-        console.warn("[voice] no clinic resolved");
-        enqueue("عذراً، الخدمة غير متاحة حالياً، حاول لاحقاً.");
+        // 3) The booking agent streams the real answer — nothing gates it, so it
+        //    flows the moment the model produces tokens.
+        let agentSpoke = false;
+        try {
+          const result = await runBookingAgent({
+            ctx,
+            locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4.1)
+            turns,
+            owner,
+            patientPhone,
+            spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
+            onText: (t) => {
+              if (t) {
+                agentSpoke = true;
+                enqueue(t);
+              }
+            },
+          });
+          if (!agentSpoke) enqueue(result.reply || "تمام.");
+        } catch (err) {
+          console.error("[voice] agent error:", err);
+          if (!agentSpoke) enqueue("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
+        }
+        console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
+      } catch (err) {
+        console.error("[voice] stream fatal:", err);
+        if (!started) enqueue("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
+      } finally {
         controller.enqueue(enc.encode(chunk({}, "stop")));
         controller.enqueue(enc.encode("data: [DONE]\n\n"));
         controller.close();
-        return;
       }
-
-      // 3) The booking agent streams the real answer — nothing gates it, so it
-      //    flows the moment the model produces tokens.
-      let agentSpoke = false;
-      try {
-        const result = await runBookingAgent({
-          ctx,
-          locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4.1)
-          turns,
-          owner,
-          patientPhone,
-          spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
-          onText: (t) => {
-            if (t) {
-              agentSpoke = true;
-              enqueue(t);
-            }
-          },
-        });
-        if (!agentSpoke) enqueue(result.reply || "تمام.");
-      } catch (err) {
-        console.error("[voice] agent error:", err);
-        if (!agentSpoke) enqueue("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
-      }
-      console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
-
-      controller.enqueue(enc.encode(chunk({}, "stop")));
-      controller.enqueue(enc.encode("data: [DONE]\n\n"));
-      controller.close();
     },
   });
 

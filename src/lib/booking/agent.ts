@@ -275,6 +275,11 @@ export async function runBookingAgent(opts: {
   let bookedEvent: AgentResult["booked"] = null;
 
   const system = buildSystemPrompt(ctx, opts.locale, now, patientAppts, opts.patientPhone, opts.spoken);
+  // The numbered list the model SEES in the prompt. cancel_appointment must
+  // index THIS stable snapshot — book_appointment reassigns `patientAppts` to a
+  // fresh, re-sorted DB read mid-turn, which would shift the numbers the model
+  // chose against and let a reschedule cancel the WRONG (e.g. just-booked) row.
+  const shownAppts = patientAppts;
   const messages: ChatMessage[] = [
     { role: "system", content: system },
     ...opts.turns.map((t) => ({ role: t.role, content: t.content }) as ChatMessage),
@@ -382,7 +387,7 @@ export async function runBookingAgent(opts: {
       // date/time). A template delivers even outside Meta's 24h window. Empty
       // waNumber (a call with no caller id) → skip silently.
       const waNumber = patientPhone;
-      if (waNumber && ctx.clinic.whatsapp_phone_number_id) {
+      if (waNumber) {
         const when = new Intl.DateTimeFormat("ar-SA", {
           timeZone: ctx.clinic.timezone || "Asia/Riyadh",
           weekday: "long",
@@ -397,7 +402,7 @@ export async function runBookingAgent(opts: {
             process.env.WHATSAPP_CONFIRM_TEMPLATE || "appointment_confirmation",
             process.env.WHATSAPP_TEMPLATE_LANG || "ar",
             [ctx.clinic.name?.trim() || "العيادة", svc!.name_ar, when],
-            ctx.clinic.whatsapp_phone_number_id,
+            ctx.clinic.whatsapp_phone_number_id ?? undefined, // null → env fallback
           );
           console.log(`[booking-tool] confirm template sent to ${waNumber}`);
         } catch (e) {
@@ -418,7 +423,8 @@ export async function runBookingAgent(opts: {
 
     if (name === "cancel_appointment") {
       const idx = Number(input.appointment_number) - 1;
-      const appt = Number.isInteger(idx) && idx >= 0 ? patientAppts[idx] : undefined;
+      // Index the STABLE snapshot the model numbered against — never the live list.
+      const appt = Number.isInteger(idx) && idx >= 0 ? shownAppts[idx] : undefined;
       if (!appt) {
         return JSON.stringify({
           cancelled: false,

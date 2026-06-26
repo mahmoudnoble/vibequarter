@@ -84,7 +84,18 @@ export async function sendTemplate(
         name: templateName,
         language: { code: languageCode },
         components: bodyParams.length
-          ? [{ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) }]
+          ? [
+              {
+                type: "body",
+                // Meta rejects template params containing newlines/tabs/4+ spaces
+                // (error 131009) — collapse whitespace so a stray newline in a
+                // clinic/service name can't silently kill every confirmation.
+                parameters: bodyParams.map((t) => ({
+                  type: "text",
+                  text: String(t).replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim(),
+                })),
+              },
+            ]
           : [],
       },
     }),
