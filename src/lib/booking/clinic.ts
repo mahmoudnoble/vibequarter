@@ -119,20 +119,29 @@ export async function getUpcomingAppointments(
 }
 
 /** This patient's upcoming booked appointments (by phone), soonest first. */
+/** Significant phone digits (last 9) — lets "+966 50…", "966 50…", "050…"
+ *  variants of the SAME number match, since callers and bookings store it
+ *  in different formats. Returns "" when there aren't enough digits to be safe. */
+export function phoneSuffix(phone: string | null | undefined): string {
+  const d = (phone || "").replace(/\D/g, "");
+  return d.length >= 7 ? d.slice(-9) : "";
+}
+
 export async function getPatientUpcomingAppointments(
   clinicId: string,
   owner: string,
   patientPhone: string,
 ): Promise<Array<{ id: string; serviceNameEn: string | null; serviceNameAr: string | null; startIso: string }>> {
   const db = getSupabaseServiceClient();
-  if (!db || !patientPhone) return [];
+  const suffix = phoneSuffix(patientPhone);
+  if (!db || !suffix) return [];
   const [apptRes, svcRes] = await Promise.all([
     db
       .from("appointments")
       .select("id, service_id, starts_at")
       .eq("clinic_id", clinicId)
       .eq("owner_id", owner)
-      .eq("patient_phone", patientPhone)
+      .like("patient_phone", `%${suffix}`)
       .eq("status", "booked")
       .gte("starts_at", new Date().toISOString())
       .order("starts_at", { ascending: true }),

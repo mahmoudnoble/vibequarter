@@ -11,11 +11,12 @@ import type { ChatTurn } from "@/lib/booking/types";
 function instantFiller(text: string): string {
   const t = (text || "").toLowerCase();
   const has = (...ws: string[]) => ws.some((w) => t.includes(w));
-  if (has("كنسل", "الغاء", "الغي", "إلغاء", "ألغي", "امسح", "cancel")) return "لحظة أراجع لك موعدك،";
-  if (has("غيّر", "غير", "أغير", "اغير", "اجل", "أجل", "تأجيل", "أعدل", "اعدل", "reschedule", "change")) return "ثانية أعدّل لك الموعد،";
-  if (has("سعر", "بكام", "كام", "تكلفة", "price", "cost")) return "لحظة أشوف لك التفاصيل،";
-  if (has("حجز", "احجز", "أحجز", "موعد", "ميعاد", "book", "appointment")) return "لحظة أشوف لك المواعيد،";
-  return "لحظة من فضلك،";
+  // A little longer than one word so the audio covers the agent's lookup (~2s).
+  if (has("كنسل", "الغاء", "الغي", "إلغاء", "ألغي", "امسح", "cancel")) return "لحظة من فضلك، أراجع لك موعدك المسجّل عندنا وأرجع لك حالاً،";
+  if (has("غيّر", "غير", "أغير", "اغير", "اجل", "أجل", "تأجيل", "أعدل", "اعدل", "reschedule", "change")) return "حاضر، ثانية واحدة أعدّل لك الموعد وأشوف الأوقات المتاحة،";
+  if (has("سعر", "بكام", "كام", "تكلفة", "price", "cost")) return "لحظة من فضلك، أشوف لك التفاصيل وأرجع لك حالاً،";
+  if (has("حجز", "احجز", "أحجز", "موعد", "ميعاد", "book", "appointment")) return "لحظة من فضلك، أشوف لك المواعيد المتاحة وأرجع لك حالاً،";
+  return "لحظة من فضلك، معك حالاً،";
 }
 
 /**

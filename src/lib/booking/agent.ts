@@ -74,10 +74,28 @@ const TOOLS: ToolDef[] = [
         properties: {
           appointment_number: {
             type: "integer",
-            description: "The number (1, 2, …) of the appointment from the patient's appointments list in the system prompt.",
+            description: "The number (1, 2, …) of the appointment from the patient's appointments list (THIS PATIENT, or whatever find_my_appointments returned).",
           },
         },
         required: ["appointment_number"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_my_appointments",
+      description:
+        "Look up THIS patient's existing booked appointments by phone number. Call this when the patient wants to reschedule, cancel, or ask about a booking but you do NOT already see their appointments under THIS PATIENT (e.g. the call didn't carry their number). Pass the number they booked with (or the number they're calling from); the returned numbered list is what you then use for cancel_appointment.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone: {
+            type: "string",
+            description: "The patient's phone number to search by — digits, any format (with or without country code).",
+          },
+        },
+        required: ["phone"],
       },
     },
   },
@@ -196,7 +214,7 @@ HARD RULES:
 - BOOK ONCE — DO NOT RE-BOOK OR FORGET: call book_appointment EXACTLY ONCE for a given appointment. The moment it returns booked:true the appointment is DONE and the WhatsApp confirmation has ALREADY been sent automatically. Then say ONE short warm confirmation and STOP. Do NOT call book_appointment again, do NOT re-collect any detail, and do NOT repeat "تم الحجز". If the patient then says anything (thanks, their phone number, "تمام", etc.), treat the booking as already done — answer in one short line, never re-book the same visit.
 - WHATSAPP CONFIRMATION (do NOT ask for a number): after booking, a WhatsApp confirmation is sent AUTOMATICALLY to the patient's own number — the one they are calling or messaging from (it is already known, listed under THIS PATIENT). NEVER ask "which WhatsApp number?" — just book, then tell them «بنرسل لك التأكيد على واتساب على نفس رقمك 🌟». Only pass a different whatsapp_number if the patient volunteers one themselves without being asked.
 - CLOSING THE CALL: once the booking (or whatever the patient asked for) is done and they say thanks / goodbye / "خلاص" / "تمام", reply with ONE short warm farewell (e.g. «العفو، نشوفك على خير 🌟») and STOP. Do NOT call any tool, do NOT re-check availability, and do NOT offer or deny any appointment. NEVER say a time is unavailable unless check_availability JUST returned no times for a specific day the patient asked about — otherwise you are hallucinating; don't.
-- The ONLY appointments this patient has are the numbered ones under THIS PATIENT below. If that list says "(none)", the patient has NO appointment — to reschedule or cancel, tell them they have nothing booked and offer to book a new one. NEVER invent an appointment or an appointment number.
+- THIS PATIENT lists the appointments found from the number on THIS call/chat. If it says "(none)", that may simply mean this call did not carry the patient's number — so when they want to reschedule, cancel, or check a booking, FIRST ask for the phone number they booked with (or confirm «نفس الرقم اللي بتتصل منه؟») and call find_my_appointments with it. ONLY after find_my_appointments returns zero do you tell them nothing is booked and offer a new appointment. NEVER invent an appointment or an appointment number.
 - RESCHEDULING (the patient has an appointment and wants a different time): this is NOT a second booking. FIRST call cancel_appointment with that appointment's NUMBER from the list, THEN book_appointment the new time. Never leave the patient holding two appointments for the same visit.
 - CANCELLING: call cancel_appointment with the appointment's NUMBER from the list, then confirm it's cancelled. After cancelling, that appointment no longer exists — do not refer to it as active.
 - This is NOT medical advice. Do not diagnose, recommend treatments, give dosages, or discuss results/side-effects. If asked, say the doctor will advise during the visit, and offer to book a consultation.
@@ -403,6 +421,30 @@ export async function runBookingAgent(opts: {
       booked = await getUpcomingAppointments(ctx.clinic.id, owner);
       patientAppts = patientAppts.filter((a) => a.id !== appt.id);
       return JSON.stringify({ cancelled: true });
+    }
+
+    if (name === "find_my_appointments") {
+      const found = await getPatientUpcomingAppointments(ctx.clinic.id, owner, String(input.phone ?? ""));
+      patientAppts = found; // cancel_appointment references these by number
+      if (found.length === 0) {
+        return JSON.stringify({
+          found: 0,
+          message:
+            "No upcoming appointment found for that number. Ask them to double-check the number; if still nothing, tell them nothing is booked and offer a new appointment. Do NOT invent one.",
+        });
+      }
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: ctx.clinic.timezone || "Asia/Riyadh",
+        weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+      });
+      return JSON.stringify({
+        found: found.length,
+        appointments: found.map((a, i) => ({
+          number: i + 1,
+          service: a.serviceNameAr ?? a.serviceNameEn ?? "موعد",
+          when: fmt.format(new Date(a.startIso)),
+        })),
+      });
     }
 
     return JSON.stringify({ error: "unknown_tool" });
