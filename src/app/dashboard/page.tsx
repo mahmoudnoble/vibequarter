@@ -8,25 +8,13 @@ const tools = [
     href: "/dashboard/booking",
     icon: "CalendarCheck",
     title: "Booking agent",
-    desc: "An AI agent that turns chats into booked appointments — over WhatsApp.",
-  },
-  {
-    href: "/dashboard/seo",
-    icon: "Search",
-    title: "SEO & GEO",
-    desc: "Get found on Google and inside AI answers — keywords & articles.",
-  },
-  {
-    href: "/dashboard/leads",
-    icon: "Users",
-    title: "Reviews & leads",
-    desc: "Grow your Google reviews and see where patients come from.",
+    desc: "An AI agent that books and manages appointments over WhatsApp and phone.",
   },
   {
     href: "/dashboard/settings",
     icon: "Settings",
     title: "Settings",
-    desc: "Your clinic details, workspace, and plan.",
+    desc: "Your clinic details and workspace.",
   },
 ] as const;
 
@@ -35,7 +23,7 @@ export default function OverviewPage() {
     <div className="mx-auto max-w-3xl px-5 py-8 md:px-8">
       <h1 className="font-display text-2xl font-bold text-foreground">Overview</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Everything to grow your clinic — booking, reviews, and getting found online.
+        Your clinic&apos;s AI operations agent — booking, appointments, and patient comms.
       </p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {tools.map((tool) => (

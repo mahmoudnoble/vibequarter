@@ -1,6 +1,6 @@
 import "server-only";
 import { chatCompletion, type ChatMessage, type ToolDef } from "@/lib/llm/openai";
-import type { Locale } from "@/lib/plans";
+import type { Locale } from "@/lib/i18n";
 import { computeAvailability, checkSlot, zonedWallToUtc } from "./availability";
 import {
   getUpcomingAppointments,

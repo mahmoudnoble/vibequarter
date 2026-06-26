@@ -11,10 +11,8 @@ import { useLanguage } from "@/components/i18n/language-provider";
 
 const tabs = [
   { href: "/dashboard", key: "overview", icon: "LayoutGrid" },
-  { href: "/dashboard/seo", key: "seo", icon: "Search" },
   { href: "/dashboard/booking", key: "booking", icon: "CalendarCheck" },
   { href: "/dashboard/settings", key: "settings", icon: "Settings" },
-  { href: "/dashboard/leads", key: "leads", icon: "Users" },
 ] as const;
 
 export function DashboardSidebar() {

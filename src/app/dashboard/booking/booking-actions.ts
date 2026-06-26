@@ -1,7 +1,6 @@
 "use server";
 
 import { getOwner } from "@/lib/tenant";
-import { getActiveModelForOwner } from "@/lib/subscriptions";
 import {
   clearAppointments,
   ensureClinicContext,
@@ -26,7 +25,7 @@ import type {
   ServiceInput,
   WorkingHourInput,
 } from "@/lib/booking/types";
-import type { Locale } from "@/lib/plans";
+import type { Locale } from "@/lib/i18n";
 
 const MAX_TURNS = 50;
 const MAX_CONTENT = 4000;
@@ -76,8 +75,7 @@ export async function sendBookingMessage(args: {
   const locale: Locale = args.locale === "ar" ? "ar" : "en";
 
   try {
-    const model = await getActiveModelForOwner(owner);
-    const result = await runBookingAgent({ ctx, model, locale, turns, owner });
+    const result = await runBookingAgent({ ctx, locale, turns, owner });
     const appts = await getUpcomingAppointments(ctx.clinic.id, owner);
     return {
       ok: true,

@@ -4,8 +4,8 @@ export const site = {
   // `||` (not `??`) so an empty-string env var also falls back — an empty
   // NEXT_PUBLIC_SITE_URL would otherwise make `new URL(site.domain)` throw at build.
   domain: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-  tagline: "Premium websites for the niches we know best — generated in seconds.",
+  tagline: "AI operations agent for clinics — booking, billing, and patient comms.",
   description:
-    "VibeQuarter builds premium, conversion-ready websites for the niches we specialise in — clinics & med-spas, salons, law firms, real estate, schools and interior studios. Describe your business and watch a launch-ready, bilingual (Arabic + English) site generate in seconds — or book us to build it done-for-you.",
+    "VibeQuarter is an AI agent that runs a clinic's day-to-day operations: booking and managing appointments over WhatsApp and phone, ZATCA-compliant invoicing, collecting patient contact details, and routing patient questions to the doctor.",
   twitter: "@vibequarter",
 } as const;

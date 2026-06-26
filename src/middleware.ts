@@ -12,7 +12,7 @@ const authEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 // Central, default-deny protection for private routes — defense in depth on top
 // of each page's own auth() check, and automatic coverage for future routes.
-const isProtected = createRouteMatcher(["/dashboard(.*)", "/admin(.*)"]);
+const isProtected = createRouteMatcher(["/dashboard(.*)"]);
 
 const passthrough = () => NextResponse.next();
 
