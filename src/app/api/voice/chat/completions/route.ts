@@ -6,7 +6,7 @@ import { runBookingAgent } from "@/lib/booking/agent";
 import type { ChatTurn } from "@/lib/booking/types";
 
 const ACK_SYSTEM =
-  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short sentence, in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything), that shows you heard and are on it — briefly restate their request. Do NOT answer, list options, ask anything, or book. Examples: «تمام، تبغى موعد ليزر، ثانية أشوف لك» / «حاضر يا فندم، لحظة أراجع لك المواعيد» / 'sure, one moment while I check'.";
+  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short phrase (max ~8 words) in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything) that shows you're on it and names what they want. Do NOT greet (no «السلام»/«أهلاً»/«حياك»), do NOT answer, list options, ask anything, or book. Examples: «تمام، لحظة أشوف لك مواعيد الليزر» / «حاضر، أراجع لك حجزك حالاً» / 'sure, one moment while I check'.";
 
 /**
  * Voice channel — Vapi "Custom LLM" endpoint (OpenAI-compatible /chat/completions).
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
   const body = new ReadableStream({
     async start(controller) {
       let started = false;
-      const push = (text: string) => {
+      const enqueue = (text: string) => {
         if (!text) return;
         if (!started) {
           controller.enqueue(enc.encode(chunk({ role: "assistant" }, null)));
@@ -107,40 +107,60 @@ export async function POST(req: Request) {
         }
         controller.enqueue(enc.encode(chunk({ content: text }, null)));
       };
-      try {
-        // STAGE 1 — instant acknowledgement (fast Haiku), streamed first so the
-        // caller is reassured the MOMENT they finish, BEFORE the slower booking
-        // work runs. Restates their request in their own language/dialect.
-        try {
-          await chatCompletion({
-            model: process.env.OPENAI_ACK_MODEL || "gpt-4o-mini",
-            maxTokens: 40,
-            messages: [
-              { role: "system", content: ACK_SYSTEM },
-              { role: "user", content: turns[turns.length - 1].content },
-            ],
-            onText: (d) => push(d),
-          });
-          push(" ");
-        } catch (e) {
-          console.error("[voice] ack failed:", e);
-        }
 
-        // STAGE 2 — the real booking agent (checks availability, books, etc.).
-        const result = await runBookingAgent({
-          ctx,
-          locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4o)
-          turns,
-          owner,
-          patientPhone,
-          onText: push,
-        });
-        if (!started) push(result.reply || "تمام.");
-        console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
-      } catch (err) {
+      // Run the booking agent CONCURRENTLY with the ack, so its DB grounding +
+      // first tool round happen WHILE the caller hears the acknowledgement —
+      // killing the dead gap between "got it" and the real answer. The agent's
+      // text is buffered until the ack finishes, then flushed in order.
+      let ackDone = false;
+      let agentBuf = "";
+      const agentPush = (t: string) => {
+        if (!t) return;
+        if (ackDone) enqueue(t);
+        else agentBuf += t;
+      };
+      const agentPromise = runBookingAgent({
+        ctx,
+        locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4.1)
+        turns,
+        owner,
+        patientPhone,
+        onText: agentPush,
+      }).catch((err) => {
         console.error("[voice] agent error:", err);
-        if (!started) push("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
+        return null;
+      });
+
+      // STAGE 1 — instant acknowledgement (fast small model), streamed FIRST so
+      // the caller is reassured the moment they finish; names the request in
+      // their own dialect, no greeting.
+      try {
+        await chatCompletion({
+          model: process.env.OPENAI_ACK_MODEL || "gpt-4o-mini",
+          maxTokens: 30,
+          temperature: 0.4,
+          messages: [
+            { role: "system", content: ACK_SYSTEM },
+            { role: "user", content: turns[turns.length - 1].content },
+          ],
+          onText: enqueue,
+        });
+        enqueue(" ");
+      } catch (e) {
+        console.error("[voice] ack failed:", e);
       }
+
+      // Ack done → flush whatever the agent produced meanwhile, then let the
+      // rest of its reply stream live.
+      ackDone = true;
+      if (agentBuf) {
+        enqueue(agentBuf);
+        agentBuf = "";
+      }
+      const result = await agentPromise;
+      if (!started) enqueue(result?.reply || "تمام.");
+      console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
+
       controller.enqueue(enc.encode(chunk({}, "stop")));
       controller.enqueue(enc.encode("data: [DONE]\n\n"));
       controller.close();
