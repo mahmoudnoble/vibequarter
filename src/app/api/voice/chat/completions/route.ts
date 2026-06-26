@@ -1,12 +1,22 @@
 import { randomUUID } from "crypto";
-import { chatCompletion } from "@/lib/llm/openai";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { ensureClinicContext } from "@/lib/booking/clinic";
 import { runBookingAgent } from "@/lib/booking/agent";
 import type { ChatTurn } from "@/lib/booking/types";
 
-const ACK_SYSTEM =
-  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short phrase (max ~8 words) in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything) that shows you're on it and names what they want. Do NOT greet (no «السلام»/«أهلاً»/«حياك»), do NOT answer, list options, ask anything, or book. Write any number/time in Arabic words, never digits (e.g. «العاشرة والنصف», not «10:30»). Examples: «تمام، لحظة أشوف لك مواعيد الليزر» / «حاضر، أراجع لك حجزك حالاً» / 'sure, one moment while I check'.";
+// INSTANT acknowledgement — deterministic, ZERO model latency. Picks a natural
+// "one moment" line from keywords in the caller's last utterance, so the caller
+// hears a fitting reply the millisecond they stop talking. Putting an LLM here
+// (even a small one) was the lag: it gated the whole turn behind ~1s.
+function instantFiller(text: string): string {
+  const t = (text || "").toLowerCase();
+  const has = (...ws: string[]) => ws.some((w) => t.includes(w));
+  if (has("كنسل", "الغاء", "الغي", "إلغاء", "ألغي", "امسح", "cancel")) return "لحظة أراجع لك موعدك،";
+  if (has("غيّر", "غير", "أغير", "اغير", "اجل", "أجل", "تأجيل", "أعدل", "اعدل", "reschedule", "change")) return "ثانية أعدّل لك الموعد،";
+  if (has("سعر", "بكام", "كام", "تكلفة", "price", "cost")) return "لحظة أشوف لك التفاصيل،";
+  if (has("حجز", "احجز", "أحجز", "موعد", "ميعاد", "book", "appointment")) return "لحظة أشوف لك المواعيد،";
+  return "لحظة من فضلك،";
+}
 
 /**
  * Voice channel — Vapi "Custom LLM" endpoint (OpenAI-compatible /chat/completions).
@@ -50,16 +60,7 @@ export async function POST(req: Request) {
     return openAiError("invalid JSON body");
   }
 
-  const owner = await resolveVoiceOwner();
-  if (!owner) {
-    console.warn("[voice] no clinic resolved");
-    return streamCompletion("عذراً، الخدمة غير متاحة حالياً. حاول لاحقاً.");
-  }
-
-  const ctx = await ensureClinicContext(owner);
-  if (!ctx) return streamCompletion("عذراً، حدث خطأ. حاول لاحقاً.");
-
-  // The caller's number — makes the agent patient-aware (reschedule/cancel).
+  // Parse caller + transcript FIRST (no DB) so the instant filler needs zero I/O.
   const callerRaw = payload.call?.customer?.number ?? payload.customer?.number ?? "";
   const patientPhone = callerRaw.replace(/[^0-9]/g, "") || undefined;
 
@@ -69,14 +70,17 @@ export async function POST(req: Request) {
     .map((m) => ({ role: m.role as "user" | "assistant", content: textOf(m.content).trim() }))
     .filter((t) => t.content);
 
-  // Greet ONCE, only at the very start of the call. For any other request that
-  // doesn't end with a fresh patient utterance (Vapi pings / silence), stay
-  // silent — re-greeting on every such call was the repetition bug.
-  if (turns.length === 0) {
-    return streamCompletion(`السلام عليكم، ${ctx.clinic.name?.trim() || "العيادة"} معك، كيف أقدر أساعدك؟`);
-  }
-  if (turns[turns.length - 1].role !== "user") {
+  // A Vapi ping that doesn't end with a fresh patient utterance → stay silent
+  // (re-greeting on every such ping was the old repetition bug).
+  if (turns.length > 0 && turns[turns.length - 1].role !== "user") {
     return streamCompletion("");
+  }
+
+  // Call-open greeting (no turns yet) — latency-tolerant; needs the clinic name.
+  if (turns.length === 0) {
+    const o = await resolveVoiceOwner();
+    const c = o ? await ensureClinicContext(o) : null;
+    return streamCompletion(`السلام عليكم، ${c?.clinic.name?.trim() || "العيادة"} معك، كيف أقدر أساعدك؟`);
   }
 
   // Log the STT transcript so we can judge Gulf-Arabic recognition quality.
@@ -108,58 +112,45 @@ export async function POST(req: Request) {
         controller.enqueue(enc.encode(chunk({ content: text }, null)));
       };
 
-      // Run the booking agent CONCURRENTLY with the ack, so its DB grounding +
-      // first tool round happen WHILE the caller hears the acknowledgement —
-      // killing the dead gap between "got it" and the real answer. The agent's
-      // text is buffered until the ack finishes, then flushed in order.
-      let ackDone = false;
-      let agentBuf = "";
-      const agentPush = (t: string) => {
-        if (!t) return;
-        if (ackDone) enqueue(t);
-        else agentBuf += t;
-      };
-      const agentPromise = runBookingAgent({
-        ctx,
-        locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4.1)
-        turns,
-        owner,
-        patientPhone,
-        spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
-        onText: agentPush,
-      }).catch((err) => {
-        console.error("[voice] agent error:", err);
-        return null;
-      });
+      // 1) INSTANT filler — emitted with zero I/O so the caller hears a natural
+      //    "one moment" the millisecond they finish speaking.
+      enqueue(instantFiller(turns[turns.length - 1].content) + " ");
 
-      // STAGE 1 — instant acknowledgement (fast small model), streamed FIRST so
-      // the caller is reassured the moment they finish; names the request in
-      // their own dialect, no greeting.
+      // 2) Resolve the clinic (DB) WHILE the filler audio plays — no lag.
+      const owner = await resolveVoiceOwner();
+      const ctx = owner ? await ensureClinicContext(owner) : null;
+      if (!owner || !ctx) {
+        console.warn("[voice] no clinic resolved");
+        enqueue("عذراً، الخدمة غير متاحة حالياً، حاول لاحقاً.");
+        controller.enqueue(enc.encode(chunk({}, "stop")));
+        controller.enqueue(enc.encode("data: [DONE]\n\n"));
+        controller.close();
+        return;
+      }
+
+      // 3) The booking agent streams the real answer — nothing gates it, so it
+      //    flows the moment the model produces tokens.
+      let agentSpoke = false;
       try {
-        await chatCompletion({
-          model: process.env.OPENAI_ACK_MODEL || "gpt-4.1-mini",
-          maxTokens: 30,
-          temperature: 0.2, // accurate restatement — must not misread the request
-          messages: [
-            { role: "system", content: ACK_SYSTEM },
-            { role: "user", content: turns[turns.length - 1].content },
-          ],
-          onText: enqueue,
+        const result = await runBookingAgent({
+          ctx,
+          locale: "ar", // model defaults to OPENAI_BOOKING_MODEL (gpt-4.1)
+          turns,
+          owner,
+          patientPhone,
+          spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
+          onText: (t) => {
+            if (t) {
+              agentSpoke = true;
+              enqueue(t);
+            }
+          },
         });
-        enqueue(" ");
-      } catch (e) {
-        console.error("[voice] ack failed:", e);
+        if (!agentSpoke) enqueue(result.reply || "تمام.");
+      } catch (err) {
+        console.error("[voice] agent error:", err);
+        if (!agentSpoke) enqueue("عذراً، صار خطأ بسيط. ممكن تعيد كلامك؟");
       }
-
-      // Ack done → flush whatever the agent produced meanwhile, then let the
-      // rest of its reply stream live.
-      ackDone = true;
-      if (agentBuf) {
-        enqueue(agentBuf);
-        agentBuf = "";
-      }
-      const result = await agentPromise;
-      if (!started) enqueue(result?.reply || "تمام.");
       console.log(`[voice] turn ok caller=${patientPhone ?? "?"} streamed=${started}`);
 
       controller.enqueue(enc.encode(chunk({}, "stop")));
