@@ -48,12 +48,11 @@ const TOOLS: ToolDef[] = [
     function: {
       name: "book_appointment",
       description:
-        "Book one appointment. Only call after you have the patient's full name, phone number, the chosen service, and a specific time the patient agreed to that came from check_availability. Pass the `date` and `time` EXACTLY as check_availability returned them — they are clinic-local; never convert to UTC or compute the time yourself.",
+        "Book one appointment. Only call after you have the patient's full name, the chosen service, and a specific time the patient agreed to that came from check_availability. The patient's phone is taken automatically from the call — do NOT collect it, do NOT ask for it, and do NOT pass it. Pass the `date` and `time` EXACTLY as check_availability returned them — they are clinic-local; never convert to UTC or compute the time yourself.",
       parameters: {
         type: "object",
         properties: {
           patient_name: { type: "string", description: "Patient's full name." },
-          patient_phone: { type: "string", description: "Patient's phone number." },
           service: { type: "string", description: "The chosen service (name or id)." },
           date: { type: "string", description: "Chosen day as YYYY-MM-DD (clinic-local) — exactly the `date` from check_availability." },
           time: { type: "string", description: 'Chosen start time as HH:MM 24-hour clinic-local — exactly the `time` from check_availability (e.g. "13:30").' },
@@ -213,7 +212,7 @@ LANGUAGE & MANNER:
 HARD RULES:
 - NEVER invent services, prices, available times, or appointments. Only mention services from the list. Only offer times returned by check_availability. Only mention appointments listed under THIS PATIENT below — never make up appointments the patient has.
 - Always call check_availability before proposing or confirming any time. If the patient names a day, check that day.
-- To book you MUST have: the chosen service, the patient's full name, and a specific time they agreed to. The patient's phone is already known (their WhatsApp number, below) — use it; do NOT ask for it.
+- To book you MUST have: the chosen service, the patient's full name, and a specific time they agreed to. The patient's phone comes from the call automatically — you NEVER ask for it or pass it. If this call carries no number, still book normally; just don't promise a WhatsApp confirmation.
 - Only claim an appointment is booked AFTER book_appointment returns booked:true. If it returns a conflict, apologise and offer another time from a fresh check_availability.
 - BOOK ONCE — DO NOT RE-BOOK OR FORGET: call book_appointment EXACTLY ONCE for a given appointment. The moment it returns booked:true the appointment is DONE and the WhatsApp confirmation has ALREADY been sent automatically. Then say ONE short warm confirmation and STOP. Do NOT call book_appointment again, do NOT re-collect any detail, and do NOT repeat "تم الحجز". If the patient then says anything (thanks, their phone number, "تمام", etc.), treat the booking as already done — answer in one short line, never re-book the same visit.
 - WHATSAPP CONFIRMATION — NEVER ASK FOR A NUMBER: the patient's phone is the number they're calling from (already known). After booking, a WhatsApp confirmation is sent AUTOMATICALLY to that number. Do NOT ask for a phone number or a WhatsApp number at all — it only confuses things. Just book and tell them «بنرسل لك التأكيد على واتساب 🌟».
@@ -233,7 +232,7 @@ ${servicesList(ctx)}
 ${hoursSummary(ctx)}
 
 THIS PATIENT:
-- WhatsApp phone (use this as their phone; never ask for it): ${patientPhone ?? "unknown"}
+- Phone on this call (used automatically for the booking + WhatsApp; you NEVER ask for it or pass it): ${patientPhone || "(no number on this call — book anyway, and skip the WhatsApp line)"}
 - Their current upcoming appointments:
 ${patientSection}
 
@@ -313,16 +312,18 @@ export async function runBookingAgent(opts: {
       // gave OVERWRITES the number they're calling from (they asked to be reached
       // there); otherwise we use the caller's own number. This is what gets stored
       // AND where the confirmation is sent.
-      // The patient's number is the one they're calling from — we never ask for it.
-      // Normalise to international digits so Meta accepts the WhatsApp send.
-      const callerPhone = (opts.patientPhone || String(input.patient_phone ?? "")).replace(/[^0-9]/g, "");
-      const patientPhone = toIntlPhone(callerPhone, clinicCountryCode(ctx.clinic.timezone || "Asia/Riyadh"));
+      // The patient's number comes ONLY from the call (caller id) — never from the
+      // model. Normalise to international digits so Meta accepts the WhatsApp send.
+      // May be empty (e.g. a web test with no caller id) — that's fine; we still book.
+      const callerPhone = String(opts.patientPhone ?? "").replace(/[^0-9]/g, "");
+      const patientPhone = callerPhone
+        ? toIntlPhone(callerPhone, clinicCountryCode(ctx.clinic.timezone || "Asia/Riyadh"))
+        : "";
       const dateStr = String(input.date ?? "").trim();
       const timeStr = String(input.time ?? "").trim();
       const parsedTime = parseLocalTime(timeStr);
       const missing: string[] = [];
       if (!patientName) missing.push("patient_name");
-      if (!patientPhone) missing.push("patient_phone");
       if (!svc) missing.push("service");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) missing.push("date");
       if (!parsedTime) missing.push("time");
