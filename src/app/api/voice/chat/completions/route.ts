@@ -125,6 +125,7 @@ export async function POST(req: Request) {
         turns,
         owner,
         patientPhone,
+        spoken: true, // phone call → spell numbers/times as Arabic words for the TTS
         onText: agentPush,
       }).catch((err) => {
         console.error("[voice] agent error:", err);

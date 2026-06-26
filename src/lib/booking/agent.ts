@@ -151,10 +151,18 @@ function buildSystemPrompt(
   now: Date,
   patientAppts: Array<{ id: string; serviceNameEn: string | null; serviceNameAr: string | null; startIso: string }>,
   patientPhone?: string,
+  spoken?: boolean,
 ): string {
   const tz = ctx.clinic.timezone || "Asia/Riyadh";
   const clinicName = ctx.clinic.name?.trim() || "our clinic";
   const preferred = locale === "ar" ? "Arabic" : "the language the patient writes in";
+
+  // On a phone call the reply text is spoken by a TTS that mispronounces raw
+  // digits — so force every number/time/date/price into spoken Arabic words.
+  const spokenNumbersRule = spoken
+    ? `
+- SPOKEN NUMBERS (this is a PHONE CALL — your text is read aloud by a voice that mangles digits): NEVER output digits or Latin numerals or ":" — write EVERY number, time, date, duration and price fully in Arabic WORDS exactly as a person says them. «10:30 ص» → «العاشرة والنصف صباحاً»؛ «11:00» → «الحادية عشرة»؛ «4:15 م» → «الرابعة والربع عصراً»؛ «28 يونيو» → «الثامن والعشرين من يونيو»؛ «300 ريال» → «ثلاثمئة ريال»؛ «45 دقيقة» → «خمس وأربعين دقيقة». A phone number is said digit-by-digit in words. The tool gives you times with digits — convert them to words before you speak. NEVER let a digit appear in your reply.`
+    : "";
 
   const apptFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
@@ -178,7 +186,7 @@ LANGUAGE & MANNER:
 - Keep replies SHORT — one or two sentences, one question at a time. This is often a phone call where the patient is listening (not reading), so brevity and a natural spoken rhythm matter. Avoid bullet lists and long menus out loud; offer 2-3 options max at a time.
 - DON'T LOOP: once the patient picks a time you already offered, do NOT list the times again — move straight to booking: get their name if you don't have it, confirm in one short line, then call book_appointment. Re-run check_availability and re-list ONLY if they ask for a different day/time. Never repeat the same menu twice in a row.
 - GREET ONCE: greet only at the very start of the conversation. On every later reply do NOT greet again (no «السلام عليكم» / «أهلاً» / «حياك») and do NOT echo the patient's request back word-for-word — a colleague may have already said a quick acknowledgement, so just give the helpful answer directly and concisely.
-- When replying in Arabic, write ONLY in Arabic script — do NOT mix in English words or Latin letters; on a phone the voice mispronounces them. ALWAYS say the ARABIC service name (e.g. «جلسة ليزر», never "Laser session"). Say dates and times naturally in spoken Arabic.
+- When replying in Arabic, write ONLY in Arabic script — do NOT mix in English words or Latin letters; on a phone the voice mispronounces them. ALWAYS say the ARABIC service name (e.g. «جلسة ليزر», never "Laser session"). Say dates and times naturally in spoken Arabic.${spokenNumbersRule}
 
 HARD RULES:
 - NEVER invent services, prices, available times, or appointments. Only mention services from the list. Only offer times returned by check_availability. Only mention appointments listed under THIS PATIENT below — never make up appointments the patient has.
@@ -223,6 +231,9 @@ export async function runBookingAgent(opts: {
   owner: string;
   patientPhone?: string;
   now?: Date;
+  // Voice sets this so the reply spells numbers/times/dates as Arabic words
+  // (a TTS mispronounces raw digits).
+  spoken?: boolean;
   // Voice channel passes this to stream the reply token-by-token so TTS can
   // start speaking immediately instead of waiting for the full response.
   onText?: (delta: string) => void;
@@ -241,7 +252,7 @@ export async function runBookingAgent(opts: {
   ]);
   let bookedEvent: AgentResult["booked"] = null;
 
-  const system = buildSystemPrompt(ctx, opts.locale, now, patientAppts, opts.patientPhone);
+  const system = buildSystemPrompt(ctx, opts.locale, now, patientAppts, opts.patientPhone, opts.spoken);
   const messages: ChatMessage[] = [
     { role: "system", content: system },
     ...opts.turns.map((t) => ({ role: t.role, content: t.content }) as ChatMessage),
