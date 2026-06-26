@@ -6,7 +6,7 @@ import { runBookingAgent } from "@/lib/booking/agent";
 import type { ChatTurn } from "@/lib/booking/types";
 
 const ACK_SYSTEM =
-  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short phrase (max ~8 words) in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything) that shows you're on it and names what they want. Do NOT greet (no «السلام»/«أهلاً»/«حياك»), do NOT answer, list options, ask anything, or book. Examples: «تمام، لحظة أشوف لك مواعيد الليزر» / «حاضر، أراجع لك حجزك حالاً» / 'sure, one moment while I check'.";
+  "You are a clinic phone receptionist. The patient just spoke. Reply with ONE very short phrase (max ~8 words) in the SAME language and dialect they used (Egyptian/Gulf/Levantine Arabic, English, anything) that shows you're on it and names what they want. Do NOT greet (no «السلام»/«أهلاً»/«حياك»), do NOT answer, list options, ask anything, or book. Write any number/time in Arabic words, never digits (e.g. «العاشرة والنصف», not «10:30»). Examples: «تمام، لحظة أشوف لك مواعيد الليزر» / «حاضر، أراجع لك حجزك حالاً» / 'sure, one moment while I check'.";
 
 /**
  * Voice channel — Vapi "Custom LLM" endpoint (OpenAI-compatible /chat/completions).
