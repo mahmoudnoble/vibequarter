@@ -19,6 +19,27 @@ function instantFiller(text: string): string {
   return "لحظة من فضلك، معك حالاً،";
 }
 
+/** Map Arabic-Indic / Persian digits to Latin so phone numbers parse either way. */
+function toLatinDigits(s: string): string {
+  return s.replace(/[٠-٩۰-۹]/g, (d) => {
+    const code = d.charCodeAt(0);
+    return String(code <= 0x0669 ? code - 0x0660 : code - 0x06f0);
+  });
+}
+
+/** Recover the patient's phone from a number they said earlier in the call, so
+ *  the appointment lookup is stable across turns when the call carries no id. */
+function extractPhoneFromTurns(turns: ChatTurn[]): string | undefined {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role !== "user") continue;
+    // Join digits split by spaces/dashes ("973 3870 5548" → "97338705548").
+    const joined = toLatinDigits(turns[i].content).replace(/(?<=\d)[\s-]+(?=\d)/g, "");
+    const runs = joined.match(/\d{7,15}/g);
+    if (runs && runs.length) return runs[runs.length - 1];
+  }
+  return undefined;
+}
+
 /**
  * Voice channel — Vapi "Custom LLM" endpoint (OpenAI-compatible /chat/completions).
  *
@@ -61,15 +82,18 @@ export async function POST(req: Request) {
     return openAiError("invalid JSON body");
   }
 
-  // Parse caller + transcript FIRST (no DB) so the instant filler needs zero I/O.
-  const callerRaw = payload.call?.customer?.number ?? payload.customer?.number ?? "";
-  const patientPhone = callerRaw.replace(/[^0-9]/g, "") || undefined;
-
   // Map Vapi's OpenAI transcript → our ChatTurn[] (drop Vapi's own system/tool msgs).
   const turns: ChatTurn[] = (payload.messages ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: textOf(m.content).trim() }))
     .filter((t) => t.content);
+
+  // The patient's phone: the caller ID if present, ELSE a number they said
+  // earlier in THIS call — so the booking lookup stays consistent every turn (a
+  // web/forwarded call often carries no caller id, which made the agent "forget"
+  // the appointment it had just looked up).
+  const callerRaw = payload.call?.customer?.number ?? payload.customer?.number ?? "";
+  const patientPhone = callerRaw.replace(/[^0-9]/g, "") || extractPhoneFromTurns(turns) || undefined;
 
   // A Vapi ping that doesn't end with a fresh patient utterance → stay silent
   // (re-greeting on every such ping was the old repetition bug).

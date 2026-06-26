@@ -131,14 +131,14 @@ export async function getPatientUpcomingAppointments(
   clinicId: string,
   owner: string,
   patientPhone: string,
-): Promise<Array<{ id: string; serviceNameEn: string | null; serviceNameAr: string | null; startIso: string }>> {
+): Promise<Array<{ id: string; serviceNameEn: string | null; serviceNameAr: string | null; startIso: string; patientName: string | null }>> {
   const db = getSupabaseServiceClient();
   const suffix = phoneSuffix(patientPhone);
   if (!db || !suffix) return [];
   const [apptRes, svcRes] = await Promise.all([
     db
       .from("appointments")
-      .select("id, service_id, starts_at")
+      .select("id, service_id, starts_at, patient_name")
       .eq("clinic_id", clinicId)
       .eq("owner_id", owner)
       .like("patient_phone", `%${suffix}`)
@@ -150,9 +150,9 @@ export async function getPatientUpcomingAppointments(
   const byId = new Map(
     ((svcRes.data ?? []) as Array<{ id: string; name_en: string; name_ar: string }>).map((s) => [s.id, s]),
   );
-  return ((apptRes.data ?? []) as Array<{ id: string; service_id: string | null; starts_at: string }>).map((r) => {
+  return ((apptRes.data ?? []) as Array<{ id: string; service_id: string | null; starts_at: string; patient_name: string | null }>).map((r) => {
     const svc = r.service_id ? byId.get(r.service_id) : undefined;
-    return { id: r.id, serviceNameEn: svc?.name_en ?? null, serviceNameAr: svc?.name_ar ?? null, startIso: r.starts_at };
+    return { id: r.id, serviceNameEn: svc?.name_en ?? null, serviceNameAr: svc?.name_ar ?? null, startIso: r.starts_at, patientName: r.patient_name ?? null };
   });
 }
 
