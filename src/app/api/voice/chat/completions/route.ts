@@ -8,18 +8,18 @@ import type { ChatTurn } from "@/lib/booking/types";
 // "one moment" line from keywords in the caller's last utterance, so the caller
 // hears a fitting reply the millisecond they stop talking. Putting an LLM here
 // (even a small one) was the lag: it gated the whole turn behind ~1s.
-function instantFiller(text: string): string {
+function instantFiller(text: string, seed: number): string {
   const t = (text || "").toLowerCase();
   const has = (...ws: string[]) => ws.some((w) => t.includes(w));
-  // Closing / thanks / goodbye → NO filler; the agent just says a short farewell,
-  // so "لحظة من فضلك..." there is pointless (and felt repetitive).
+  // Rotate among variants (by turn index) so it doesn't feel like the same line.
+  const pick = (arr: string[]) => arr[Math.abs(seed) % arr.length];
+  // Closing / thanks / goodbye → NO filler; the agent just says a short farewell.
   if (has("شكر", "مشكور", "تسلم", "سلامة", "مع السلامة", "باي", "thank", "bye", "العافية", "تمام خلاص", "خلاص يكفي")) return "";
-  // Otherwise a brief filler that covers the agent's lookup (~2s) without dragging.
-  if (has("كنسل", "الغاء", "الغي", "إلغاء", "ألغي", "امسح", "cancel")) return "لحظة أراجع لك موعدك،";
-  if (has("غيّر", "غير", "أغير", "اغير", "اجل", "أجل", "تأجيل", "أعدل", "اعدل", "reschedule", "change")) return "ثانية أعدّل لك الموعد،";
-  if (has("سعر", "بكام", "كام", "تكلفة", "price", "cost")) return "لحظة أشوف لك التفاصيل،";
-  if (has("حجز", "احجز", "أحجز", "موعد", "ميعاد", "book", "appointment")) return "لحظة أشوف لك المواعيد،";
-  return "ثانية واحدة،";
+  if (has("كنسل", "الغاء", "الغي", "إلغاء", "ألغي", "امسح", "cancel")) return pick(["لحظة أراجع لك موعدك،", "ثانية أطلّع لك موعدك،", "حاضر، أشوف موعدك،"]);
+  if (has("غيّر", "غير", "أغير", "اغير", "اجل", "أجل", "تأجيل", "أعدل", "اعدل", "reschedule", "change")) return pick(["ثانية أعدّل لك الموعد،", "حاضر، أظبط لك الموعد،", "تمام، أشوف لك وقت ثاني،"]);
+  if (has("سعر", "بكام", "كام", "تكلفة", "price", "cost")) return pick(["لحظة أشوف لك التفاصيل،", "ثانية أجيب لك المعلومة،"]);
+  if (has("حجز", "احجز", "أحجز", "موعد", "ميعاد", "book", "appointment")) return pick(["لحظة أشوف لك المواعيد،", "ثانية أطلّع لك الأوقات المتاحة،", "حاضر، أشوف لك المتاح،"]);
+  return pick(["ثانية واحدة،", "لحظة،", "طيب، لحظة،", "حاضر، ثانية،", "تمام، لحظة،"]);
 }
 
 /** Map Arabic-Indic / Persian digits to Latin so phone numbers parse either way. */
@@ -142,7 +142,7 @@ export async function POST(req: Request) {
 
       // 1) INSTANT filler — emitted with zero I/O so the caller hears a natural
       //    "one moment" the millisecond they finish speaking (empty on closings).
-      const filler = instantFiller(turns[turns.length - 1].content);
+      const filler = instantFiller(turns[turns.length - 1].content, turns.length);
       if (filler) enqueue(filler + " ");
 
       // 2) Resolve the clinic (DB) WHILE the filler audio plays — no lag.

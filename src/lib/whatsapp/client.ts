@@ -48,6 +48,12 @@ export async function sendText(to: string, body: string, phoneNumberId?: string)
     const err = await res.text();
     throw new Error(`Meta WhatsApp send error ${res.status}: ${err}`);
   }
+  // Log Meta's response so delivery issues are diagnosable. A 200 here only means
+  // Meta ACCEPTED it — actual delivery still depends on the 24h window / the
+  // sandbox's allowed-recipient list. The delivered/failed status arrives later
+  // via a status webhook, not in this response.
+  const data = (await res.json().catch(() => null)) as { messages?: Array<{ id?: string }> } | null;
+  console.log(`[whatsapp] accepted to=${to} id=${data?.messages?.[0]?.id ?? "?"}`);
 }
 
 /** Mark an inbound message as read (double blue tick). Best-effort. */
