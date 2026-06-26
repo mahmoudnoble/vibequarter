@@ -113,6 +113,29 @@ function parseLocalTime(t: string): { h: number; mi: number } | null {
   return { h, mi };
 }
 
+/** Pick the clinic's country dialing code from its timezone (Gulf-first). */
+function clinicCountryCode(tz: string): string {
+  if (tz.includes("Bahrain")) return "973";
+  if (tz.includes("Dubai") || tz.includes("Abu_Dhabi")) return "971";
+  if (tz.includes("Kuwait")) return "965";
+  if (tz.includes("Qatar")) return "974";
+  if (tz.includes("Muscat")) return "968";
+  if (tz.includes("Cairo")) return "20";
+  return "966"; // Riyadh / default
+}
+
+/** Normalise a phone to international digits (E.164 without +) so Meta accepts it:
+ *  "0509990000" → "966509990000", "509990000" → "966509990000", already-intl kept. */
+function toIntlPhone(phone: string, cc: string): string {
+  let d = (phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("00")) d = d.slice(2); // 00966… → 966…
+  if (d.startsWith("0")) return cc + d.slice(1); // local 05… → 9665…
+  if (d.startsWith(cc)) return d; // already has this country code
+  if (d.length <= 9) return cc + d; // bare national number
+  return d; // assume already international (e.g. another country)
+}
+
 function resolveService(ctx: ClinicContext, query: string | undefined): ServiceRow | null {
   if (!query) return null;
   const q = query.trim().toLowerCase();
@@ -215,6 +238,8 @@ HARD RULES:
 - WHATSAPP CONFIRMATION (do NOT ask for a number): after booking, a WhatsApp confirmation is sent AUTOMATICALLY to the patient's own number — the one they are calling or messaging from (it is already known, listed under THIS PATIENT). NEVER ask "which WhatsApp number?" — just book, then tell them «بنرسل لك التأكيد على واتساب على نفس رقمك 🌟». Only pass a different whatsapp_number if the patient volunteers one themselves without being asked.
 - CLOSING THE CALL: once the booking (or whatever the patient asked for) is done and they say thanks / goodbye / "خلاص" / "تمام", reply with ONE short warm farewell (e.g. «العفو، نشوفك على خير 🌟») and STOP. Do NOT call any tool, do NOT re-check availability, and do NOT offer or deny any appointment. NEVER say a time is unavailable unless check_availability JUST returned no times for a specific day the patient asked about — otherwise you are hallucinating; don't.
 - THIS PATIENT lists the appointments found from the number on THIS call/chat. If it says "(none)", that may simply mean this call did not carry the patient's number — so when they want to reschedule, cancel, or check a booking, FIRST ask for the phone number they booked with (or confirm «نفس الرقم اللي بتتصل منه؟») and call find_my_appointments with it. ONLY after find_my_appointments returns zero do you tell them nothing is booked and offer a new appointment. NEVER invent an appointment or an appointment number.
+- ASKING FOR A PHONE NUMBER — be human and smart about it: tell the patient to say it WITH the country code FIRST then the rest, slowly and clearly so you catch every digit — e.g. «ممكن رقمك كامل مع مفتاح الدولة، وعلى مهلك شوية عشان ألحق أكتبه». After they say it, read it back briefly to confirm before you rely on it. If you only caught part of it or it sounds off, say so warmly and ask them to repeat just the unclear part.
+- DIFFERENT WHATSAPP NUMBER: by default the confirmation goes to the number they're calling from — do NOT ask. But if the patient says they want the confirmation on a DIFFERENT number and gives it, pass that as whatsapp_number to book_appointment — it overwrites and becomes their contact; confirm «تمام، بنرسله على الرقم الجديد».
 - RESCHEDULING (the patient has an appointment and wants a different time): this is NOT a second booking. Book the NEW time FIRST (book_appointment); ONLY after it returns booked:true do you cancel the OLD appointment (cancel_appointment by its number). This order means the patient is NEVER left with no appointment if the new time turns out to be unavailable. Always cancel the old one once the new is confirmed — never leave them holding two for the same visit. Reuse the SAME patient name from their existing appointment — do NOT ask for the name again, NEVER book as «غير محدد» / unspecified, and pass the name EXACTLY as stored (e.g. «خالد العتيبي»), without prepending words like «باسم».
 - CANCELLING: call cancel_appointment with the appointment's NUMBER from the list, then confirm it's cancelled. After cancelling, that appointment no longer exists — do not refer to it as active.
 - This is NOT medical advice. Do not diagnose, recommend treatments, give dosages, or discuss results/side-effects. If asked, say the doctor will advise during the visit, and offer to book a consultation.
@@ -305,9 +330,14 @@ export async function runBookingAgent(opts: {
     if (name === "book_appointment") {
       const svc = resolveService(ctx, input.service as string | undefined);
       const patientName = String(input.patient_name ?? "").trim();
-      // On WhatsApp the sender's number is authoritative — store it so reschedule/
-      // cancel lookups (which key on the WhatsApp number) always match.
-      const patientPhone = (opts.patientPhone || String(input.patient_phone ?? "")).trim();
+      // The patient's contact number. A WhatsApp number the patient explicitly
+      // gave OVERWRITES the number they're calling from (they asked to be reached
+      // there); otherwise we use the caller's own number. This is what gets stored
+      // AND where the confirmation is sent.
+      const givenWa = String(input.whatsapp_number ?? "").replace(/[^0-9]/g, "");
+      const callerPhone = (opts.patientPhone || String(input.patient_phone ?? "")).replace(/[^0-9]/g, "");
+      // Normalise to international digits so Meta accepts the WhatsApp send.
+      const patientPhone = toIntlPhone(givenWa || callerPhone, clinicCountryCode(ctx.clinic.timezone || "Asia/Riyadh"));
       const dateStr = String(input.date ?? "").trim();
       const timeStr = String(input.time ?? "").trim();
       const parsedTime = parseLocalTime(timeStr);
@@ -363,16 +393,14 @@ export async function runBookingAgent(opts: {
       }
 
       booked = await getUpcomingAppointments(ctx.clinic.id, owner);
-      if (opts.patientPhone) {
-        patientAppts = await getPatientUpcomingAppointments(ctx.clinic.id, owner, opts.patientPhone);
+      if (patientPhone) {
+        patientAppts = await getPatientUpcomingAppointments(ctx.clinic.id, owner, patientPhone);
       }
 
-      // WhatsApp confirmation — to the number the patient chose (defaults to the
-      // contact phone, i.e. the number they're calling/messaging from). Free-form
-      // delivers within the 24h window; production needs an approved template.
-      const waNumber =
-        String(input.whatsapp_number ?? "").replace(/[^0-9]/g, "") ||
-        patientPhone.replace(/[^0-9]/g, "");
+      // WhatsApp confirmation — sent to the stored contact (the WhatsApp number the
+      // patient gave, else the caller's). Free-form delivers within Meta's 24h
+      // window; production needs an approved template for cold sends.
+      const waNumber = patientPhone;
       if (waNumber && ctx.clinic.whatsapp_phone_number_id) {
         const when = new Intl.DateTimeFormat("ar-SA", {
           timeZone: ctx.clinic.timezone || "Asia/Riyadh",
