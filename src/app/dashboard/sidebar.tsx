@@ -9,19 +9,23 @@ import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/components/i18n/language-provider";
 
-const tabs = [
-  { href: "/dashboard", key: "overview", icon: "LayoutGrid" },
-  { href: "/dashboard/booking", key: "booking", icon: "CalendarCheck" },
-  { href: "/dashboard/settings", key: "settings", icon: "Settings" },
-] as const;
-
-export function DashboardSidebar() {
+export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const pathname = usePathname();
   const { user } = useUser();
   const { t, locale, toggle } = useLanguage();
   const [open, setOpen] = useState(true);
   const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
   const langLabel = locale === "ar" ? t.dashboard.switchToEnglish : t.dashboard.switchToArabic;
+
+  // Super-admins get the cross-clinic console; everyone else sees the clinic tabs.
+  const tabs: { href: string; label: string; icon: string }[] = [
+    { href: "/dashboard", label: t.dashboard.tabs.overview, icon: "LayoutGrid" },
+    ...(isSuperAdmin
+      ? [{ href: "/dashboard/admin", label: locale === "ar" ? "العيادات" : "Clinics", icon: "Building2" }]
+      : []),
+    { href: "/dashboard/booking", label: t.dashboard.tabs.booking, icon: "CalendarCheck" },
+    { href: "/dashboard/settings", label: t.dashboard.tabs.settings, icon: "Settings" },
+  ];
 
   return (
     <aside
@@ -56,7 +60,7 @@ export function DashboardSidebar() {
         {tabs.map((tab) => {
           const active =
             tab.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(tab.href);
-          const label = t.dashboard.tabs[tab.key];
+          const label = tab.label;
           return (
             <Link
               key={tab.href}

@@ -305,6 +305,33 @@ export async function updateClinicInfo(
 }
 
 /**
+ * Super-admin provisioning of a clinic (name + channel binding + status). Used
+ * by the admin console after creating the clinic's Clerk org. Service-role write.
+ */
+export async function updateClinicProvisioning(
+  clinicId: string,
+  owner: string,
+  fields: {
+    name?: string;
+    whatsapp_phone_number_id?: string | null;
+    scope?: "whatsapp" | "whatsapp_calls";
+    vapi_assistant_id?: string | null;
+    vapi_phone_number_id?: string | null;
+    vapi_phone_e164?: string | null;
+    status?: "active" | "paused";
+  },
+): Promise<boolean> {
+  const db = getSupabaseServiceClient();
+  if (!db) return false;
+  const { error } = await db
+    .from("clinics")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", clinicId)
+    .eq("owner_id", owner);
+  return !error;
+}
+
+/**
  * ZATCA tax identity for the clinic. Read/written ONLY by the invoice + settings
  * flow — deliberately separate from ensureClinicContext (the hot booking path)
  * so the core agent never depends on the VAT columns / their migration.
