@@ -13,12 +13,25 @@ const authEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 // Central, default-deny protection for private routes — defense in depth on top
 // of each page's own auth() check, and automatic coverage for future routes.
 const isProtected = createRouteMatcher(["/dashboard(.*)"]);
+// Super-admin-only surfaces (clinic management + cross-clinic console).
+const isAdminRoute = createRouteMatcher(["/dashboard/admin(.*)", "/api/admin(.*)"]);
+
+const superAdminIds = () =>
+  (process.env.SUPER_ADMIN_USER_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const passthrough = () => NextResponse.next();
 
 export default authEnabled
   ? clerkMiddleware(async (auth, req) => {
       if (isProtected(req)) await auth.protect();
+      // Defense-in-depth for the admin surfaces (the real check is
+      // requireSuperAdmin() inside each admin action/route).
+      if (isAdminRoute(req)) {
+        const { userId } = await auth();
+        if (!userId || !superAdminIds().includes(userId)) {
+          return NextResponse.redirect(new URL("/dashboard", req.url));
+        }
+      }
     })
   : passthrough;
 

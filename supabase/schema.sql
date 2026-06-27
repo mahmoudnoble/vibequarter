@@ -409,3 +409,137 @@ alter table public.invoices enable row level security;
 
 create policy "owner reads its invoices"  on public.invoices for select using (owner_id = public.current_tenant());
 create policy "owner writes its invoices" on public.invoices for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+-- ============================================================================
+-- Multi-tenant SaaS (clinic = Clerk org; super-admin manages many clinics).
+-- Clinic config (channel scope + voice binding), agent answer-hours, patient
+-- questions, campaigns, usage counters, and a cross-clinic summary view.
+-- ============================================================================
+
+-- Channel scope, Vapi (voice) binding, and active/paused status per clinic.
+alter table public.clinics
+  add column if not exists scope                text not null default 'whatsapp'
+      check (scope in ('whatsapp','whatsapp_calls')),
+  add column if not exists vapi_assistant_id    text,
+  add column if not exists vapi_phone_number_id text,
+  add column if not exists vapi_phone_e164      text,
+  add column if not exists status               text not null default 'active'
+      check (status in ('active','paused'));
+create index if not exists clinics_vapi_assistant_idx on public.clinics (vapi_assistant_id) where vapi_assistant_id is not null;
+create index if not exists clinics_vapi_number_idx    on public.clinics (vapi_phone_number_id) where vapi_phone_number_id is not null;
+
+-- Agent answer-hours: when the AI picks up CALLS (distinct from bookable
+-- working_hours). No rows for a clinic ⇒ always-on (pilot-safe).
+create table if not exists public.agent_hours (
+  id         uuid primary key default gen_random_uuid(),
+  clinic_id  uuid not null references public.clinics(id) on delete cascade,
+  owner_id   text not null check (owner_id <> ''),
+  weekday    int  not null check (weekday between 0 and 6),
+  open_time  time not null,
+  close_time time not null,
+  check (close_time > open_time)
+);
+create index if not exists agent_hours_clinic_idx on public.agent_hours (clinic_id, weekday);
+alter table public.agent_hours enable row level security;
+create policy "owner reads its agent hours"  on public.agent_hours for select using (owner_id = public.current_tenant());
+create policy "owner writes its agent hours" on public.agent_hours for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+-- Patient questions routed to the doctor (CONTACT/clinical-question intake, not history).
+create table if not exists public.patient_questions (
+  id            uuid primary key default gen_random_uuid(),
+  clinic_id     uuid not null references public.clinics(id) on delete cascade,
+  owner_id      text not null check (owner_id <> ''),
+  patient_phone text,
+  patient_name  text,
+  channel       text not null default 'whatsapp' check (channel in ('whatsapp','voice','manual')),
+  question      text not null,
+  status        text not null default 'open' check (status in ('open','answered','dismissed')),
+  answer        text,
+  created_at    timestamptz not null default now(),
+  answered_at   timestamptz
+);
+create index if not exists patient_questions_clinic_idx on public.patient_questions (clinic_id, status, created_at desc);
+alter table public.patient_questions enable row level security;
+create policy "owner reads its questions"  on public.patient_questions for select using (owner_id = public.current_tenant());
+create policy "owner writes its questions" on public.patient_questions for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+-- Campaigns: template-based bulk WhatsApp (Meta requires an APPROVED template
+-- for cold/bulk sends — free-form only delivers inside the 24h window).
+create table if not exists public.campaigns (
+  id            uuid primary key default gen_random_uuid(),
+  clinic_id     uuid not null references public.clinics(id) on delete cascade,
+  owner_id      text not null check (owner_id <> ''),
+  name          text not null,
+  template_name text not null,
+  template_lang text not null default 'ar',
+  body_params   jsonb not null default '[]'::jsonb,
+  status        text not null default 'draft' check (status in ('draft','sending','sent','failed')),
+  total         int not null default 0,
+  sent          int not null default 0,
+  failed        int not null default 0,
+  created_at    timestamptz not null default now(),
+  sent_at       timestamptz
+);
+create index if not exists campaigns_clinic_idx on public.campaigns (clinic_id, created_at desc);
+alter table public.campaigns enable row level security;
+create policy "owner reads its campaigns"  on public.campaigns for select using (owner_id = public.current_tenant());
+create policy "owner writes its campaigns" on public.campaigns for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+create table if not exists public.campaign_recipients (
+  id            uuid primary key default gen_random_uuid(),
+  campaign_id   uuid not null references public.campaigns(id) on delete cascade,
+  owner_id      text not null check (owner_id <> ''),
+  patient_phone text not null,
+  status        text not null default 'pending' check (status in ('pending','sent','failed')),
+  error         text,
+  sent_at       timestamptz
+);
+create index if not exists campaign_recipients_campaign_idx on public.campaign_recipients (campaign_id, status);
+alter table public.campaign_recipients enable row level security;
+create policy "owner reads its recipients"  on public.campaign_recipients for select using (owner_id = public.current_tenant());
+create policy "owner writes its recipients" on public.campaign_recipients for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+-- Append-only usage counters (writes service-role only; owner can read).
+create table if not exists public.usage_events (
+  id          uuid primary key default gen_random_uuid(),
+  owner_id    text not null check (owner_id <> ''),
+  clinic_id   uuid references public.clinics(id) on delete cascade,
+  kind        text not null check (kind in ('message_in','message_out','call','booking','invoice','campaign_send')),
+  occurred_at timestamptz not null default now()
+);
+create index if not exists usage_events_owner_idx on public.usage_events (owner_id, occurred_at desc);
+create index if not exists usage_events_kind_idx  on public.usage_events (clinic_id, kind, occurred_at desc);
+alter table public.usage_events enable row level security;
+create policy "owner reads its usage" on public.usage_events for select using (owner_id = public.current_tenant());
+
+-- Cross-clinic usage summary — read SERVER-SIDE via the service-role key for the
+-- super-admin console (security_invoker so any RLS-bound querier is still scoped).
+create or replace view public.clinic_usage_summary
+with (security_invoker = true) as
+select
+  c.id as clinic_id, c.owner_id, c.name, c.status, c.scope, c.timezone,
+  coalesce(a.bookings_total,0)     as bookings_total,
+  coalesce(a.bookings_booked,0)    as bookings_booked,
+  coalesce(a.bookings_completed,0) as bookings_completed,
+  coalesce(i.invoices_count,0)     as invoices_count,
+  coalesce(i.revenue,0)            as revenue,
+  coalesce(p.patients_count,0)     as patients_count,
+  coalesce(s.conversations,0)      as conversations
+from public.clinics c
+left join (
+  select clinic_id, count(*) as bookings_total,
+    count(*) filter (where status='booked')    as bookings_booked,
+    count(*) filter (where status='completed') as bookings_completed
+  from public.appointments group by clinic_id
+) a on a.clinic_id = c.id
+left join (
+  select clinic_id, count(*) as invoices_count,
+    sum(total) filter (where status='issued') as revenue
+  from public.invoices group by clinic_id
+) i on i.clinic_id = c.id
+left join (
+  select clinic_id, count(*) as patients_count from public.patients group by clinic_id
+) p on p.clinic_id = c.id
+left join (
+  select clinic_id, count(*) as conversations from public.whatsapp_sessions group by clinic_id
+) s on s.clinic_id = c.id;
