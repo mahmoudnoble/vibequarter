@@ -14,7 +14,9 @@ export type CreateClinicInput = {
   vapiPhoneNumberId?: string;
   vapiPhoneE164?: string;
   agentHours?: WorkingHourInput[];
-  receptionistUsername?: string;
+  // Sign-in is email + password (OAuth + self sign-up are disabled); the
+  // super-admin provisions the receptionist and sends them these credentials.
+  receptionistEmail?: string;
   receptionistPassword?: string;
 };
 
@@ -22,7 +24,7 @@ export type CreateClinicResult = {
   ok: boolean;
   orgId?: string;
   clinicId?: string;
-  receptionist?: { username: string } | null;
+  receptionist?: { email: string } | null;
   receptionistError?: string;
   error?: string;
 };
@@ -36,12 +38,13 @@ function msg(e: unknown): string {
   return String(e);
 }
 
+const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
 /**
  * Create a clinic = a Clerk Organization (super-admin is its admin), seed its
  * clinic row + defaults, set its channel binding + agent answer-hours, and
- * optionally provision a receptionist (username+password → org:member).
- * Clinic creation succeeds even if receptionist provisioning fails (e.g.
- * username+password sign-in not yet enabled on the Clerk instance).
+ * optionally provision a receptionist (email + password → org:member). Clinic
+ * creation succeeds even if receptionist provisioning fails.
  */
 export async function createClinicAction(input: CreateClinicInput): Promise<CreateClinicResult> {
   await requireSuperAdmin();
@@ -84,11 +87,12 @@ export async function createClinicAction(input: CreateClinicInput): Promise<Crea
   }
 
   // 5) Receptionist (optional, graceful).
-  let receptionist: { username: string } | null = null;
+  let receptionist: { email: string } | null = null;
   let receptionistError: string | undefined;
-  if (input.receptionistUsername?.trim() && input.receptionistPassword) {
-    const r = await provisionReceptionist(orgId, input.receptionistUsername.trim(), input.receptionistPassword);
-    if (r.ok) receptionist = { username: input.receptionistUsername.trim() };
+  if (input.receptionistEmail?.trim() && input.receptionistPassword) {
+    const email = input.receptionistEmail.trim();
+    const r = await provisionReceptionist(orgId, email, input.receptionistPassword);
+    if (r.ok) receptionist = { email };
     else receptionistError = r.error;
   }
 
@@ -96,28 +100,33 @@ export async function createClinicAction(input: CreateClinicInput): Promise<Crea
 }
 
 /**
- * Create a receptionist Clerk user (username+password) and add them to the
- * clinic org as a member. Requires username+password sign-in enabled on the
- * Clerk instance; returns a readable error otherwise.
+ * Create a receptionist Clerk user (email + password) and add them to the clinic
+ * org as a member. The email is marked verified so they can sign in immediately
+ * with the credentials the super-admin hands them.
  */
 export async function provisionReceptionistAction(
   orgId: string,
-  username: string,
+  email: string,
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireSuperAdmin();
-  return provisionReceptionist(orgId, username.trim(), password);
+  return provisionReceptionist(orgId, email.trim(), password);
 }
 
 async function provisionReceptionist(
   orgId: string,
-  username: string,
+  email: string,
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!username || !password) return { ok: false, error: "username-and-password-required" };
+  if (!email || !password) return { ok: false, error: "email-and-password-required" };
+  if (!isEmail(email)) return { ok: false, error: "invalid-email" };
   const client = await clerkClient();
   try {
-    const user = await client.users.createUser({ username, password });
+    const user = await client.users.createUser({
+      emailAddress: [email],
+      password,
+      skipPasswordChecks: false,
+    });
     await client.organizations.createOrganizationMembership({
       organizationId: orgId,
       userId: user.id,

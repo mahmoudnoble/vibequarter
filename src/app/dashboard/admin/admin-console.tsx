@@ -18,9 +18,9 @@ const STR = {
     nameLabel: "Clinic name", phoneLabel: "WhatsApp Phone Number ID",
     scopeLabel: "Channels (scope)", vapiAssistant: "Vapi assistant ID", vapiNumber: "Vapi phone-number ID",
     vapiE164: "Clinic phone number", recHeading: "Receptionist login (optional)",
-    username: "Username", password: "Password",
-    recHint: "Needs Username+Password enabled in Clerk. You can also add a receptionist later.",
-    createdOk: "Clinic created.", recOk: "Receptionist created.", recFail: "Clinic created, but the receptionist wasn't:",
+    email: "Email", password: "Password",
+    recHint: "The client signs in with this email + password. You can add a receptionist later too.",
+    createdOk: "Clinic created.", recOk: "Receptionist created:", recFail: "Clinic created, but the receptionist wasn't:",
     nameReq: "Enter a clinic name.",
   },
   ar: {
@@ -33,9 +33,9 @@ const STR = {
     nameLabel: "اسم العيادة", phoneLabel: "معرّف رقم واتساب",
     scopeLabel: "القنوات (النطاق)", vapiAssistant: "Vapi assistant ID", vapiNumber: "Vapi phone-number ID",
     vapiE164: "رقم تليفون العيادة", recHeading: "حساب موظف الاستقبال (اختياري)",
-    username: "اسم المستخدم", password: "كلمة المرور",
-    recHint: "يحتاج تفعيل اسم المستخدم+كلمة المرور في Clerk. تقدر تضيف موظفًا لاحقًا.",
-    createdOk: "تم إنشاء العيادة.", recOk: "تم إنشاء حساب الموظف.", recFail: "اتعملت العيادة، لكن حساب الموظف لأ:",
+    email: "الإيميل", password: "كلمة المرور",
+    recHint: "العميل بيدخل بالإيميل ده + كلمة المرور. تقدر تضيف موظفًا لاحقًا.",
+    createdOk: "تم إنشاء العيادة.", recOk: "تم إنشاء حساب الموظف:", recFail: "اتعملت العيادة، لكن حساب الموظف لأ:",
     nameReq: "أدخل اسم العيادة.",
   },
 };
@@ -131,7 +131,7 @@ function CreateClinicForm({ L, onClose }: { L: (typeof STR)["en"]; onClose: () =
   const [vapiAssistant, setVapiAssistant] = useState("");
   const [vapiNumber, setVapiNumber] = useState("");
   const [vapiE164, setVapiE164] = useState("");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [result, setResult] = useState<CreateClinicResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +151,7 @@ function CreateClinicForm({ L, onClose }: { L: (typeof STR)["en"]; onClose: () =
         vapiAssistantId: vapiAssistant || undefined,
         vapiPhoneNumberId: vapiNumber || undefined,
         vapiPhoneE164: vapiE164 || undefined,
-        receptionistUsername: username || undefined,
+        receptionistEmail: email || undefined,
         receptionistPassword: password || undefined,
       });
       setResult(res);
@@ -171,7 +171,7 @@ function CreateClinicForm({ L, onClose }: { L: (typeof STR)["en"]; onClose: () =
         </p>
         {result.receptionist && (
           <p className="mt-2 text-sm text-foreground">
-            {L.recOk} <span className="font-mono">{result.receptionist.username}</span>
+            {L.recOk} <span className="font-mono">{result.receptionist.email}</span>
           </p>
         )}
         {result.receptionistError && (
@@ -233,7 +233,7 @@ function CreateClinicForm({ L, onClose }: { L: (typeof STR)["en"]; onClose: () =
       <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
         <p className="mb-2 text-xs font-semibold text-foreground">{L.recHeading}</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={L.username} dir="ltr" className={field} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={L.email} type="email" dir="ltr" className={field} />
           <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder={L.password} type="text" dir="ltr" className={field} />
         </div>
         <p className="mt-1.5 text-xs text-muted-foreground">{L.recHint}</p>
