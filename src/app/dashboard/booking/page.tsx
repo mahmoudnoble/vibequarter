@@ -7,7 +7,6 @@ import {
   toServiceViews,
   toWorkingHourInputs,
 } from "@/lib/booking/clinic";
-import { getInvoices } from "@/lib/booking/invoices";
 import { BookingStudio } from "./booking-studio";
 
 export const metadata = { title: "Booking agent" };
@@ -16,14 +15,13 @@ export default async function BookingPage() {
   const owner = await getOwner();
   const ctx = owner ? await ensureClinicContext(owner) : null;
 
-  const [allAppts, patients, invoices, taxSettings] = ctx && owner
+  const [allAppts, patients, taxSettings] = ctx && owner
     ? await Promise.all([
         getAllAppointmentsFull(ctx.clinic.id, owner),
         getPatients(ctx.clinic.id, owner),
-        getInvoices(ctx.clinic.id, owner),
         getClinicTaxSettings(ctx.clinic.id, owner),
       ])
-    : [[], [], [], null];
+    : [[], [], null];
 
   return (
     <BookingStudio
@@ -35,7 +33,6 @@ export default async function BookingPage() {
       workingHours={ctx ? toWorkingHourInputs(ctx.hours) : []}
       initialAppointments={allAppts}
       initialPatients={patients}
-      initialInvoices={invoices}
       taxSettings={taxSettings}
     />
   );

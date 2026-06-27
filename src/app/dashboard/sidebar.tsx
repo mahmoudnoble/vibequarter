@@ -17,14 +17,14 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
   const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
   const langLabel = locale === "ar" ? t.dashboard.switchToEnglish : t.dashboard.switchToArabic;
 
-  // Super-admins get the cross-clinic console; everyone else sees the clinic tabs.
+  // Super-admins get the cross-clinic console; everyone sees the clinic tabs.
   const tabs: { href: string; label: string; icon: string }[] = [
     { href: "/dashboard", label: t.dashboard.tabs.overview, icon: "LayoutGrid" },
     ...(isSuperAdmin
       ? [{ href: "/dashboard/admin", label: locale === "ar" ? "العيادات" : "Clinics", icon: "Building2" }]
       : []),
     { href: "/dashboard/booking", label: t.dashboard.tabs.booking, icon: "CalendarCheck" },
-    { href: "/dashboard/settings", label: t.dashboard.tabs.settings, icon: "Settings" },
+    { href: "/dashboard/invoices", label: t.dashboard.booking.invoicesTab.heading, icon: "ReceiptText" },
   ];
 
   return (
