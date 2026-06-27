@@ -16,7 +16,9 @@ import {
   getPatients,
   getClinicTaxSettings,
   updateClinicTaxSettings,
+  insertBookedAppointment,
 } from "@/lib/booking/clinic";
+import { zonedWallToUtc } from "@/lib/booking/availability";
 import {
   createInvoice,
   getInvoices,
@@ -212,6 +214,59 @@ export async function getPatientsAction(): Promise<PatientView[]> {
   return getPatients(ctx.clinic.id, owner);
 }
 
+/** Receptionist adds a booking by hand (source='manual'). */
+export async function addManualBookingAction(input: {
+  serviceId: string;
+  date: string; // "YYYY-MM-DD" clinic-local
+  time: string; // "HH:MM" clinic-local
+  patientName: string;
+  patientPhone?: string;
+}): Promise<{ ok: boolean; appointment?: AppointmentFull; error?: string }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, error: "auth" };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false, error: "no-clinic" };
+  const svc = ctx.services.find((s) => s.id === input.serviceId);
+  if (!svc) return { ok: false, error: "service" };
+  if (!input.patientName?.trim()) return { ok: false, error: "name" };
+  const md = input.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const mt = input.time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!md || !mt) return { ok: false, error: "datetime" };
+
+  const tz = ctx.clinic.timezone || "Asia/Riyadh";
+  const startUtc = zonedWallToUtc(+md[1], +md[2], +md[3], +mt[1], +mt[2], tz);
+  if (Number.isNaN(startUtc.getTime())) return { ok: false, error: "datetime" };
+  const endUtc = new Date(startUtc.getTime() + svc.duration_min * 60000);
+
+  const res = await insertBookedAppointment({
+    clinicId: ctx.clinic.id,
+    owner,
+    serviceId: svc.id,
+    patientName: input.patientName.trim(),
+    patientPhone: input.patientPhone?.trim() || null,
+    startIso: startUtc.toISOString(),
+    endIso: endUtc.toISOString(),
+    source: "manual",
+  });
+  if (!res.ok || !res.row) return { ok: false, error: res.conflict ? "conflict" : "db" };
+
+  const row = res.row;
+  return {
+    ok: true,
+    appointment: {
+      id: row.id,
+      patientName: row.patient_name,
+      patientPhone: row.patient_phone,
+      serviceNameEn: svc.name_en,
+      serviceNameAr: svc.name_ar,
+      startIso: row.starts_at,
+      endIso: row.ends_at,
+      status: row.status as AppointmentFull["status"],
+      source: row.source,
+    },
+  };
+}
+
 // ── ZATCA invoicing ──────────────────────────────────────────────────────────
 
 export async function getTaxSettingsAction(): Promise<ClinicTaxSettings | null> {
@@ -252,8 +307,7 @@ export async function getInvoicesAction(): Promise<InvoiceView[]> {
 }
 
 export async function createInvoiceAction(data: {
-  patientName?: string;
-  patientPhone?: string;
+  appointmentId: string;
   amount: number;
   amountIncludesVat: boolean;
   notes?: string;
@@ -262,12 +316,12 @@ export async function createInvoiceAction(data: {
   if (!owner) return { ok: false, error: "no-db" };
   const ctx = await ensureClinicContext(owner);
   if (!ctx) return { ok: false, error: "no-clinic" };
+  if (!data.appointmentId) return { ok: false, error: "appointment-not-found" };
   if (!Number.isFinite(data.amount) || data.amount <= 0) return { ok: false, error: "db-error" };
   const res = await createInvoice({
     clinicId: ctx.clinic.id,
     owner,
-    patientName: data.patientName?.trim() || null,
-    patientPhone: data.patientPhone?.trim() || null,
+    appointmentId: data.appointmentId,
     amount: data.amount,
     amountIncludesVat: data.amountIncludesVat,
     notes: data.notes?.trim() || null,

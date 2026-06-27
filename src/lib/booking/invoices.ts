@@ -18,6 +18,9 @@ export type CreateInvoiceError =
   | "no-db"
   | "no-clinic"
   | "missing-vat-settings"
+  | "appointment-not-found"
+  | "appointment-not-completed"
+  | "already-invoiced"
   | "seq-conflict"
   | "db-error";
 
@@ -52,6 +55,34 @@ export async function createInvoice(args: {
   if (!sellerName || !vatNumber) return { ok: false, error: "missing-vat-settings" };
   const vatRate = c.vat_rate == null ? 15 : Number(c.vat_rate);
 
+  // An invoice may ONLY be issued for a COMPLETED appointment, and at most one
+  // invoice per appointment. The patient identity is taken from the appointment
+  // (trusted) rather than the client.
+  let patientName = args.patientName ?? null;
+  let patientPhone = args.patientPhone ?? null;
+  if (args.appointmentId) {
+    const { data: appt } = await db
+      .from("appointments")
+      .select("patient_name, patient_phone, status")
+      .eq("id", args.appointmentId)
+      .eq("clinic_id", args.clinicId)
+      .eq("owner_id", args.owner)
+      .maybeSingle();
+    if (!appt) return { ok: false, error: "appointment-not-found" };
+    const a = appt as { patient_name: string | null; patient_phone: string | null; status: string };
+    if (a.status !== "completed") return { ok: false, error: "appointment-not-completed" };
+    const { data: existing } = await db
+      .from("invoices")
+      .select("id")
+      .eq("appointment_id", args.appointmentId)
+      .eq("clinic_id", args.clinicId)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return { ok: false, error: "already-invoiced" };
+    patientName = a.patient_name;
+    patientPhone = a.patient_phone;
+  }
+
   const amounts = computeInvoiceAmounts(args.amount, vatRate, args.amountIncludesVat);
   const issuedAt = new Date();
   const qrPayload = buildZatcaQrPayload({
@@ -81,8 +112,8 @@ export async function createInvoice(args: {
       appointment_id: args.appointmentId ?? null,
       seq,
       invoice_number: formatInvoiceNumber(seq),
-      patient_name: args.patientName ?? null,
-      patient_phone: args.patientPhone ?? null,
+      patient_name: patientName,
+      patient_phone: patientPhone,
       issued_at: issuedAt.toISOString(),
       subtotal: amounts.subtotal,
       vat_rate: vatRate,
@@ -175,6 +206,7 @@ function toInvoiceView(r: InvoiceRow): InvoiceView {
   return {
     id: r.id,
     invoiceNumber: r.invoice_number,
+    appointmentId: r.appointment_id,
     patientName: r.patient_name,
     patientPhone: r.patient_phone,
     issuedAt: r.issued_at,

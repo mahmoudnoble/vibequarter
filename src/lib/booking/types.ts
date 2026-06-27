@@ -49,6 +49,7 @@ export type InvoiceRow = {
 export type InvoiceView = {
   id: string;
   invoiceNumber: string;
+  appointmentId: string | null;
   patientName: string | null;
   patientPhone: string | null;
   issuedAt: string;

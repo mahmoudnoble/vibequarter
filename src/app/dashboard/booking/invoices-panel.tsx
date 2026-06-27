@@ -9,13 +9,15 @@ import {
   cancelInvoiceAction,
   getInvoiceQrAction,
 } from "./booking-actions";
-import type { ClinicTaxSettings, InvoiceView } from "@/lib/booking/types";
+import type { AppointmentFull, ClinicTaxSettings, InvoiceView } from "@/lib/booking/types";
 
 export function InvoicesPanel({
   initialInvoices,
+  invoiceable,
   taxSettings,
 }: {
   initialInvoices: InvoiceView[];
+  invoiceable: AppointmentFull[];
   taxSettings: ClinicTaxSettings | null;
 }) {
   const { t, locale } = useLanguage();
@@ -23,6 +25,7 @@ export function InvoicesPanel({
   const taxReady = Boolean(taxSettings?.legalName && taxSettings?.vatNumber);
 
   const [invoices, setInvoices] = useState<InvoiceView[]>(initialInvoices);
+  const [available, setAvailable] = useState<AppointmentFull[]>(invoiceable);
   const [showForm, setShowForm] = useState(false);
   const [viewing, setViewing] = useState<InvoiceView | null>(null);
 
@@ -78,9 +81,12 @@ export function InvoicesPanel({
           {showForm && (
             <NewInvoiceForm
               it={it}
+              appointments={available}
+              locale={locale}
               onClose={() => setShowForm(false)}
               onCreated={(inv) => {
                 setInvoices((prev) => [inv, ...prev]);
+                setAvailable((prev) => prev.filter((a) => a.id !== inv.appointmentId));
                 setShowForm(false);
               }}
             />
@@ -150,62 +156,88 @@ type InvoiceI18n = ReturnType<typeof useLanguage>["t"]["dashboard"]["booking"]["
 
 function NewInvoiceForm({
   it,
+  appointments,
+  locale,
   onClose,
   onCreated,
 }: {
   it: InvoiceI18n;
+  appointments: AppointmentFull[];
+  locale: string;
   onClose: () => void;
   onCreated: (inv: InvoiceView) => void;
 }) {
-  const [patientName, setPatientName] = useState("");
-  const [patientPhone, setPatientPhone] = useState("");
+  const [appointmentId, setAppointmentId] = useState(appointments[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [includesVat, setIncludesVat] = useState(true);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const apptLabel = (a: AppointmentFull) => {
+    const svc = locale === "ar" ? a.serviceNameAr : a.serviceNameEn;
+    const when = new Date(a.startIso).toLocaleDateString(locale === "ar" ? "ar-SA" : "en-US", {
+      day: "numeric",
+      month: "short",
+    });
+    return `${a.patientName}${svc ? ` · ${svc}` : ""} · ${when}`;
+  };
+
   function submit() {
     const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    if (!appointmentId || !Number.isFinite(amt) || amt <= 0) return;
     setError(null);
     startTransition(async () => {
       const res = await createInvoiceAction({
-        patientName: patientName.trim() || undefined,
-        patientPhone: patientPhone.trim() || undefined,
+        appointmentId,
         amount: amt,
         amountIncludesVat: includesVat,
         notes: notes.trim() || undefined,
       });
       if (res.ok && res.invoice) {
         onCreated(res.invoice);
+      } else if (res.error === "missing-vat-settings") {
+        setError(it.errorVat);
+      } else if (res.error === "already-invoiced") {
+        setError(it.errorAlready);
+      } else if (res.error === "appointment-not-completed") {
+        setError(it.errorNotCompleted);
       } else {
-        setError(res.error === "missing-vat-settings" ? it.errorVat : it.errorGeneric);
+        setError(it.errorGeneric);
       }
     });
   }
 
+  if (appointments.length === 0) {
+    return (
+      <div className="mb-4 rounded-2xl border border-dashed border-border bg-card p-5 text-center">
+        <p className="text-sm text-muted-foreground">{it.noCompleted}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 cursor-pointer rounded-lg px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {it.cancel}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-4 space-y-3 rounded-2xl border border-border bg-card p-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-foreground">{it.patientNameLabel}</label>
-          <input
-            value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-jade-500/50"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-foreground">{it.patientPhoneLabel}</label>
-          <input
-            value={patientPhone}
-            onChange={(e) => setPatientPhone(e.target.value)}
-            dir="ltr"
-            inputMode="tel"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-jade-500/50"
-          />
-        </div>
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-foreground">{it.selectAppointment}</label>
+        <select
+          value={appointmentId}
+          onChange={(e) => setAppointmentId(e.target.value)}
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-jade-500/50"
+        >
+          {appointments.map((a) => (
+            <option key={a.id} value={a.id}>
+              {apptLabel(a)}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="grid grid-cols-2 items-end gap-3">
         <div>
