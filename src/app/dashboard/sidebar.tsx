@@ -25,6 +25,8 @@ export function DashboardSidebar({ isSuperAdmin = false }: { isSuperAdmin?: bool
       : []),
     { href: "/dashboard/booking", label: t.dashboard.tabs.booking, icon: "CalendarCheck" },
     { href: "/dashboard/invoices", label: t.dashboard.booking.invoicesTab.heading, icon: "ReceiptText" },
+    { href: "/dashboard/questions", label: locale === "ar" ? "الأسئلة" : "Questions", icon: "HelpCircle" },
+    { href: "/dashboard/campaign", label: locale === "ar" ? "الحملات" : "Campaign", icon: "Megaphone" },
   ];
 
   return (

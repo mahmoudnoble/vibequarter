@@ -25,6 +25,8 @@ import {
   getInvoiceById,
   setInvoiceStatus,
 } from "@/lib/booking/invoices";
+import { listQuestions, answerQuestion, dismissQuestion, type QuestionView } from "@/lib/booking/questions";
+import { runCampaign } from "@/lib/whatsapp/campaign";
 import { runBookingAgent } from "@/lib/booking/agent";
 import { sendText } from "@/lib/whatsapp/client";
 import QRCode from "qrcode";
@@ -352,6 +354,57 @@ export async function getInvoiceQrAction(id: string): Promise<{ ok: boolean; dat
   } catch {
     return { ok: false };
   }
+}
+
+// ── patient questions ────────────────────────────────────────────────────────
+
+export async function getQuestionsAction(): Promise<QuestionView[]> {
+  const owner = await getOwner();
+  if (!owner) return [];
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return [];
+  return listQuestions(ctx.clinic.id, owner);
+}
+
+export async function answerQuestionAction(id: string, answer: string): Promise<{ ok: boolean }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx || !answer.trim()) return { ok: false };
+  return { ok: await answerQuestion(id, ctx.clinic.id, owner, answer) };
+}
+
+export async function dismissQuestionAction(id: string): Promise<{ ok: boolean }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false };
+  return { ok: await dismissQuestion(id, ctx.clinic.id, owner) };
+}
+
+// ── campaigns (bulk WhatsApp via approved template) ──────────────────────────
+
+export async function sendCampaignAction(input: {
+  name: string;
+  templateName: string;
+  templateLang: string;
+  bodyParams: string[];
+  phones: string[];
+}): Promise<{ ok: boolean; sent: number; failed: number; error?: string }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, sent: 0, failed: 0, error: "auth" };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false, sent: 0, failed: 0, error: "no-clinic" };
+  return runCampaign({
+    clinicId: ctx.clinic.id,
+    owner,
+    phoneNumberId: ctx.clinic.whatsapp_phone_number_id ?? undefined,
+    name: input.name,
+    templateName: input.templateName,
+    templateLang: input.templateLang,
+    bodyParams: input.bodyParams,
+    phones: input.phones,
+  });
 }
 
 // ── simulator ────────────────────────────────────────────────────────────────
