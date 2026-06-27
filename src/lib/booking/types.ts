@@ -97,12 +97,13 @@ export type AppointmentFull = {
   source: string;
 };
 
-/** Patient / lead row built from whatsapp_sessions. */
+/** Patient contact row from the patients directory (auto-built from bookings). */
 export type PatientView = {
   patientPhone: string;
-  lastMessageAt: string;
-  createdAt: string;
-  turnCount: number;
+  name: string | null;
+  email: string | null;
+  lastSeenAt: string;
+  appointmentCount: number;
 };
 
 /** Form input for creating / editing a service. */

@@ -220,7 +220,64 @@ export async function insertBookedAppointment(args: {
     if (error.code === "23P01") return { ok: false, conflict: true };
     return { ok: false };
   }
+
+  // Auto-build the permanent patient contact record (best-effort — never let
+  // patient bookkeeping fail a confirmed booking).
+  try {
+    await upsertPatient({
+      clinicId: args.clinicId,
+      owner: args.owner,
+      phone: args.patientPhone,
+      name: args.patientName,
+    });
+  } catch {
+    /* ignore — the appointment is already committed */
+  }
+
   return { ok: true, row: data as AppointmentRow };
+}
+
+/**
+ * Upsert a patient contact row from a booking. One row per (clinic, phone);
+ * bumps last_seen_at and fills the name when we have one (never overwrites an
+ * existing name with null). No-op without a phone or DB. CONTACT only — never
+ * medical data.
+ */
+export async function upsertPatient(args: {
+  clinicId: string;
+  owner: string;
+  phone: string | null;
+  name?: string | null;
+}): Promise<void> {
+  const db = getSupabaseServiceClient();
+  if (!db || !args.phone) return;
+  const row: Record<string, unknown> = {
+    clinic_id: args.clinicId,
+    owner_id: args.owner,
+    phone: args.phone,
+    last_seen_at: new Date().toISOString(),
+  };
+  const name = args.name?.trim();
+  if (name) row.name = name; // omit on conflict so we don't clobber a real name
+  await db.from("patients").upsert(row, { onConflict: "clinic_id,phone" });
+}
+
+/** Edit a patient's editable contact fields from the dashboard. */
+export async function updatePatientContact(
+  clinicId: string,
+  owner: string,
+  phone: string,
+  fields: { name?: string | null; email?: string | null; notes?: string | null },
+): Promise<boolean> {
+  const db = getSupabaseServiceClient();
+  if (!db) return false;
+  const { error } = await db
+    .from("patients")
+    .update(fields)
+    .eq("clinic_id", clinicId)
+    .eq("owner_id", owner)
+    .eq("phone", phone);
+  return !error;
 }
 
 /** Delete every appointment for a clinic — powers the simulator's Reset button. */
@@ -423,22 +480,62 @@ export async function getPatients(
 ): Promise<import("./types").PatientView[]> {
   const db = getSupabaseServiceClient();
   if (!db) return [];
+
+  const { data, error } = await db
+    .from("patients")
+    .select("phone, name, email, last_seen_at")
+    .eq("clinic_id", clinicId)
+    .eq("owner_id", owner)
+    .order("last_seen_at", { ascending: false });
+
+  // patients table not migrated yet → fall back to the WhatsApp-session list so
+  // the panel still shows who has been in touch (safe whatever the deploy order).
+  if (error) return getPatientsFromSessions(db, clinicId, owner);
+
+  // Appointment count per patient, matched on significant digits (format-variant safe).
+  const { data: appts } = await db
+    .from("appointments")
+    .select("patient_phone")
+    .eq("clinic_id", clinicId)
+    .eq("owner_id", owner);
+  const counts = new Map<string, number>();
+  for (const a of (appts ?? []) as Array<{ patient_phone: string | null }>) {
+    const key = phoneSuffix(a.patient_phone);
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return ((data ?? []) as Array<{
+    phone: string;
+    name: string | null;
+    email: string | null;
+    last_seen_at: string;
+  }>).map((r) => ({
+    patientPhone: r.phone,
+    name: r.name ?? null,
+    email: r.email ?? null,
+    lastSeenAt: r.last_seen_at,
+    appointmentCount: counts.get(phoneSuffix(r.phone)) ?? 0,
+  }));
+}
+
+/** Pre-migration fallback: derive the patient list from WhatsApp sessions. */
+async function getPatientsFromSessions(
+  db: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
+  clinicId: string,
+  owner: string,
+): Promise<import("./types").PatientView[]> {
   const { data } = await db
     .from("whatsapp_sessions")
-    .select("patient_phone, last_message_at, created_at, turns")
+    .select("patient_phone, last_message_at")
     .eq("clinic_id", clinicId)
     .eq("owner_id", owner)
     .order("last_message_at", { ascending: false });
-  return ((data ?? []) as Array<{
-    patient_phone: string;
-    last_message_at: string;
-    created_at: string;
-    turns: unknown[];
-  }>).map((r) => ({
+  return ((data ?? []) as Array<{ patient_phone: string; last_message_at: string }>).map((r) => ({
     patientPhone: r.patient_phone,
-    lastMessageAt: r.last_message_at,
-    createdAt: r.created_at,
-    turnCount: Array.isArray(r.turns) ? r.turns.length : 0,
+    name: null,
+    email: null,
+    lastSeenAt: r.last_message_at,
+    appointmentCount: 0,
   }));
 }
 

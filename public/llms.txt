@@ -1,38 +1,21 @@
 # VibeQuarter
 
-> VibeQuarter is a productized web studio. Describe your business in a sentence
-> and our AI generates a premium, conversion-ready, bilingual (Arabic + English)
-> website in seconds — or our team builds it done-for-you. We specialise in a
-> focused set of niches in the Gulf rather than building for everyone.
-
-## Who it's for (our specializations)
-- Clinics & medical/aesthetic spas (our anchor niche)
-- Salons & beauty
-- Law firms & consultants
-- Real-estate brokers
-- Private schools
-- Interior design & fit-out studios
+> VibeQuarter is an AI operations agent for clinics. It books and manages
+> appointments over WhatsApp and phone/voice in Arabic and English, and runs the
+> clinic's front-desk operations 24/7.
 
 ## What it does
-- Generates a complete, multi-page, on-brand website from a plain-language description.
-- AI WhatsApp booking agent: books appointments, answers, and routes leads 24/7.
-- Bilingual interface and content: English and Arabic with full RTL support.
-- Custom domains with automatic SSL on a global edge network.
-- SEO + GEO out of the box: structured data, sitemaps, and this llms.txt.
-- PDPL-aware privacy, consent, and in-Kingdom hosting options for the Gulf.
+- AI booking agent: books, reschedules, and cancels appointments over WhatsApp and phone calls.
+- Native Arabic (all dialects) and English, with full RTL support.
+- Clinic dashboard: services, working hours, appointments, patients, and a live simulator.
+- Booking confirmations delivered on WhatsApp via approved message templates.
+- PDPL-aware data handling for the Gulf (Saudi Arabia primary).
 
-## Two doors
-- Self-serve: build a site free, publish, and subscribe (~$20/mo) — try it instantly.
-- Done-for-you: our studio designs, builds and automates the whole thing for you.
-
-## Pricing
-- Starter: Free — 1 AI-built site on a vibequarter.com subdomain.
-- Pro: $20/month — unlimited pages, custom domain, AI WhatsApp booking, SEO + GEO.
-- Done-for-you: Custom — full design, build, automation, migration, and SEO/AEO retainer.
+## Roadmap
+- ZATCA-compliant invoicing.
+- Patient contact capture and routing patient questions to the doctor.
+- Post-visit Google-review requests over WhatsApp.
 
 ## Best for
-Owner-operated, cash-pay businesses in the Gulf (Saudi Arabia primary, UAE second)
-that need a premium online presence and more bookings.
-
-## Contact
-Book a strategy call from the homepage for done-for-you builds and onboarding.
+Owner-operated clinics and medical/aesthetic spas in the Gulf that want every
+call and message answered and booked automatically.

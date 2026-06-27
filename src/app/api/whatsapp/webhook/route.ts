@@ -128,8 +128,18 @@ async function resolveOwner(phoneNumberId: string): Promise<string | null> {
       .maybeSingle();
     if (data?.owner_id) return data.owner_id as string;
   }
-  // Sandbox fallback — set WHATSAPP_SANDBOX_OWNER_ID to your Clerk user ID
-  return process.env.WHATSAPP_SANDBOX_OWNER_ID ?? null;
+  // Sandbox fallback — set WHATSAPP_SANDBOX_OWNER_ID to your Clerk user ID.
+  // Fail CLOSED for real clinics: once WHATSAPP_SANDBOX_PHONE_NUMBER_ID is set
+  // (needed before onboarding a 2nd clinic), the fallback fires ONLY for that
+  // exact sandbox number — any other unmatched number is dropped (returns null)
+  // instead of being misrouted to the sandbox owner. When the sandbox number id
+  // is unset, behaviour is unchanged (preserves the single-clinic pilot).
+  const sandboxOwner = process.env.WHATSAPP_SANDBOX_OWNER_ID ?? null;
+  const sandboxNumberId = process.env.WHATSAPP_SANDBOX_PHONE_NUMBER_ID;
+  if (sandboxNumberId) {
+    return phoneNumberId === sandboxNumberId ? sandboxOwner : null;
+  }
+  return sandboxOwner;
 }
 
 // ---------------------------------------------------------------------------

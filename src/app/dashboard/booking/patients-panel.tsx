@@ -46,16 +46,20 @@ export function PatientsPanel({ patients }: { patients: PatientView[] }) {
                   <Icon name="User" className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                  <p className="font-mono text-sm font-semibold text-foreground" dir="ltr">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {p.name || pt.noName}
+                  </p>
+                  <p className="truncate font-mono text-xs text-muted-foreground" dir="ltr">
                     {p.patientPhone}
+                    {p.email ? ` · ${p.email}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {pt.lastContact}: {fmt(p.lastMessageAt)}
+                    {pt.lastContact}: {fmt(p.lastSeenAt)}
                   </p>
                 </div>
               </div>
               <span className="shrink-0 rounded-full bg-jade-500/12 px-2.5 py-1 text-xs font-semibold text-jade-700">
-                {p.turnCount} {pt.messages}
+                {p.appointmentCount} {pt.appointments}
               </span>
             </li>
           ))}

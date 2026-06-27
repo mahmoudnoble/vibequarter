@@ -66,7 +66,7 @@ const TOOLS: ToolDef[] = [
     function: {
       name: "cancel_appointment",
       description:
-        "Cancel one of THIS patient's existing booked appointments, identified by its NUMBER in the patient's appointments list. Use it when the patient asks to cancel, and as the FIRST step of a reschedule (cancel the old one, then book_appointment the new time). Only use a number that appears in the list — never invent one.",
+        "Cancel one of THIS patient's existing booked appointments, identified by its NUMBER in the patient's appointments list. Use it when the patient asks to cancel, and as the LAST step of a reschedule — ONLY after book_appointment has confirmed the new time (booked:true), then cancel the OLD one, so the patient is never left with no appointment. Only use a number that appears in the list — never invent one.",
       parameters: {
         type: "object",
         properties: {

@@ -332,3 +332,40 @@ alter table public.whatsapp_sessions enable row level security;
 create policy "tenant_isolation" on public.whatsapp_sessions
   using  (owner_id = public.current_tenant())
   with check (owner_id = public.current_tenant());
+
+-- ----------------------------------------------------------------------------
+-- Patients — the clinic's permanent CONTACT record (NOT medical history), one
+-- row per (clinic, phone). Auto-upserted on every booking (any channel) so the
+-- clinic builds a real patient directory without manual entry. This is the
+-- foundation the roadmap builds on: ZATCA invoicing, routing patient questions
+-- to the doctor, and post-visit review campaigns all key off a patient row.
+-- email/notes are optional and editable from the dashboard.
+-- ----------------------------------------------------------------------------
+create table if not exists public.patients (
+  id            uuid primary key default gen_random_uuid(),
+  clinic_id     uuid not null references public.clinics(id) on delete cascade,
+  owner_id      text not null check (owner_id <> ''),
+  phone         text not null,
+  name          text,
+  email         text,
+  notes         text,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at  timestamptz not null default now(),
+  unique (clinic_id, phone)
+);
+create index if not exists patients_clinic_idx on public.patients (clinic_id, last_seen_at desc);
+
+alter table public.patients enable row level security;
+
+create policy "owner reads its patients"  on public.patients for select using (owner_id = public.current_tenant());
+create policy "owner writes its patients" on public.patients for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());
+
+-- Backfill from existing bookings so the directory isn't empty on first deploy.
+-- Idempotent: re-running skips phones already present (on conflict do nothing).
+insert into public.patients (clinic_id, owner_id, phone, name, first_seen_at, last_seen_at)
+select distinct on (a.clinic_id, a.patient_phone)
+  a.clinic_id, a.owner_id, a.patient_phone, nullif(a.patient_name, ''), a.created_at, a.created_at
+from public.appointments a
+where a.patient_phone is not null and a.patient_phone <> ''
+order by a.clinic_id, a.patient_phone, a.created_at desc
+on conflict (clinic_id, phone) do nothing;

@@ -1,58 +1,62 @@
 # vibequarter
 
-The AI website builder — **bilingual (English + Arabic)** landing page, built on the
-VibeQuarter brand. Next.js 15 (App Router, TS) · Tailwind · framer-motion ·
-Clerk · Supabase · ready for Vercel. SEO + GEO baked in.
+An **AI operations agent for clinics** — bilingual (Arabic + English) appointment
+booking and management over **WhatsApp and phone/voice**, plus a clinic dashboard.
+Next.js 15 (App Router, TS) · Tailwind · Clerk (auth + multi-tenancy) · Supabase
+(RLS) · OpenAI (booking brain) · deployed on Vercel.
 
-> This phase ships the **landing page**. Auth pages and the multi-tenant
-> dashboard shell come next.
+> Scope is clinic operations only. The booking agent is live; ZATCA-compliant
+> invoicing and patient comms (contact capture, routing questions to the doctor)
+> are on the roadmap.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev   # http://localhost:3000
+npm run dev   # http://localhost:3000  (also runs the dev Clerk→Supabase sync daemon)
+npm run dev:app   # app only, without the sync daemon
 ```
 
-Runs immediately with **no keys** (auth + data are mocked / deferred). Add env
-vars (`cp .env.local.example .env.local`) to switch on the real services.
+Add env vars (`cp .env.local.example .env.local`) to switch on the real services.
 
 ## What's here
 
-- **Landing** (`src/app/page.tsx`): nav → prompt-box hero → trust strip →
-  "what we stand for" → features → pricing → testimonials → news → contact →
-  CTA → newsletter → footer.
-- **Bilingual EN/AR**: one dictionary (`src/lib/i18n.ts`), a `LanguageProvider`
-  + toggle that flips `dir`/`lang` (RTL for Arabic) and the Arabic font.
-- **Light + dark**: `next-themes` class strategy, light default (toggle in nav).
-- **Animation**: framer-motion (`Reveal` whileInView), `prefers-reduced-motion`
-  respected.
-- **Brand**: VibeQuarter tokens mapped into `tailwind.config.ts` + `globals.css`
-  (jade primary, indigo/cyan accents, cool-slate ink). Fonts: Space Grotesk /
-  Plus Jakarta Sans / Space Mono / IBM Plex Sans Arabic.
-- **SEO/GEO**: metadata, `sitemap.ts`, `robots.ts`, JSON-LD (Org + Software),
-  branded `opengraph-image.tsx`, and `public/llms.txt`.
-- **Stack foundation**: Clerk wired conditionally (`src/lib/auth.ts`), Supabase
-  clients + `supabase/schema.sql` (multi-tenant, RLS by `org_id`).
+- **Booking brain** (`src/lib/booking/*`): an OpenAI agent with three grounded
+  tools — `check_availability`, `book_appointment`, `cancel_appointment` —
+  backed by Supabase with a GiST exclusion constraint that makes double-booking
+  impossible. Same brain across every channel; `spoken` mode spells
+  numbers/times as Arabic words so voice TTS pronounces them correctly.
+- **WhatsApp channel** (`src/lib/whatsapp/*`, `src/app/api/whatsapp/webhook`):
+  Meta Cloud API direct, HMAC-verified webhook, 24h session persistence, booking
+  confirmation via an approved Meta template.
+- **Voice channel** (`src/app/api/voice/*`): Vapi Custom-LLM endpoint with a
+  zero-latency instant filler, plus a Hakim Gulf-Arabic TTS proxy.
+- **Dashboard** (`src/app/dashboard/*`): Overview, Booking studio
+  (Setup / Appointments / Patients / Simulator), and Settings.
+- **Bilingual EN/AR**: one dictionary (`src/lib/i18n.ts`) + a `LanguageProvider`
+  that flips `dir`/`lang` (RTL) and the Arabic font.
+- **Auth + data**: Clerk wired conditionally (`src/lib/auth.ts`), Supabase
+  clients + `supabase/schema.sql` (multi-tenant, RLS by tenant).
 
-## Turning on services (for the next phase)
+## Turning on services
 
-1. **Clerk** — keys in `.env.local`, enable **Organizations** (multi-tenancy);
-   billing via Clerk's `<PricingTable />`.
-2. **Supabase** — run `supabase/schema.sql`, connect Clerk as a third-party auth
-   provider so RLS reads `org_id` from the JWT.
-3. **Vercel** — import the repo, add the same env vars, set `NEXT_PUBLIC_SITE_URL`.
+1. **Clerk** — keys in `.env.local`, enable **Organizations** (multi-tenancy),
+   connect Clerk as a Supabase third-party auth provider so RLS reads the tenant
+   from the JWT.
+2. **Supabase** — run `supabase/schema.sql`, add the Clerk domain as a
+   third-party auth provider, use its URL + keys.
+3. **WhatsApp** — Meta Cloud API: set the WhatsApp env vars and subscribe the
+   webhook (`scripts/wa-subscribe*.mjs`).
+4. **Voice** — Vapi assistant pointed at `/api/voice/chat/completions` (brain)
+   and `/api/voice/tts` (Hakim voice).
+5. **Vercel** — import the repo, add the same env vars, set `NEXT_PUBLIC_SITE_URL`.
 
 ## Customizing
 
-- **All copy (EN + AR)** → `src/lib/i18n.ts` (placeholder metrics/testimonials/
-  prices are flagged — replace before launch).
-- **Brand colors / theme** → `tailwind.config.ts` + `src/app/globals.css`.
+- **All copy (EN + AR)** → `src/lib/i18n.ts`.
+- **Brand colors / theme** → `tailwind.config.ts` + `src/app/globals.css`
+  (jade primary).
 
 ---
-
-Note: this is an original implementation in the VibeQuarter brand, inspired by a
-common SaaS landing structure — not a copy of any third-party template's code or
-assets. Client logos and imagery are placeholders.
 
 © VibeQuarter.
