@@ -304,6 +304,47 @@ export async function updateClinicInfo(
   return !error;
 }
 
+/**
+ * ZATCA tax identity for the clinic. Read/written ONLY by the invoice + settings
+ * flow — deliberately separate from ensureClinicContext (the hot booking path)
+ * so the core agent never depends on the VAT columns / their migration.
+ */
+export async function getClinicTaxSettings(
+  clinicId: string,
+  owner: string,
+): Promise<import("./types").ClinicTaxSettings | null> {
+  const db = getSupabaseServiceClient();
+  if (!db) return null;
+  const { data, error } = await db
+    .from("clinics")
+    .select("legal_name, vat_number, vat_rate")
+    .eq("id", clinicId)
+    .eq("owner_id", owner)
+    .maybeSingle();
+  if (error || !data) return null;
+  const c = data as { legal_name: string | null; vat_number: string | null; vat_rate: number | null };
+  return {
+    legalName: c.legal_name ?? null,
+    vatNumber: c.vat_number ?? null,
+    vatRate: c.vat_rate == null ? 15 : Number(c.vat_rate),
+  };
+}
+
+export async function updateClinicTaxSettings(
+  clinicId: string,
+  owner: string,
+  fields: { legal_name?: string | null; vat_number?: string | null; vat_rate?: number },
+): Promise<boolean> {
+  const db = getSupabaseServiceClient();
+  if (!db) return false;
+  const { error } = await db
+    .from("clinics")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", clinicId)
+    .eq("owner_id", owner);
+  return !error;
+}
+
 export async function upsertService(
   clinicId: string,
   owner: string,

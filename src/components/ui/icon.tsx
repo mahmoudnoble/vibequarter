@@ -19,6 +19,8 @@ import {
   LayoutGrid, HelpCircle, Megaphone, BarChart3, Tag, CheckCircle2, Lock,
   // Booking simulator (chat UI + appointments)
   Send, User, RotateCcw, CalendarClock, CircleAlert,
+  // Booking dashboard tabs + invoicing
+  CalendarDays, UserX, ReceiptText, Settings2, QrCode,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +41,7 @@ const registry: Record<string, LucideIcon> = {
   Coffee, Utensils, ShoppingBag, Dumbbell, MapPin, Mail, Leaf, Award, Truck, Camera, Calendar,
   LayoutGrid, HelpCircle, Megaphone, BarChart3, Tag, CheckCircle2, Lock,
   Send, User, RotateCcw, CalendarClock, CircleAlert,
+  CalendarDays, UserX, ReceiptText, Settings2, QrCode,
 };
 
 export function Icon({

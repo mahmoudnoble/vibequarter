@@ -14,17 +14,29 @@ import {
   setAppointmentStatus,
   getAppointmentNotifyInfo,
   getPatients,
+  getClinicTaxSettings,
+  updateClinicTaxSettings,
 } from "@/lib/booking/clinic";
+import {
+  createInvoice,
+  getInvoices,
+  getInvoiceById,
+  setInvoiceStatus,
+} from "@/lib/booking/invoices";
 import { runBookingAgent } from "@/lib/booking/agent";
 import { sendText } from "@/lib/whatsapp/client";
+import QRCode from "qrcode";
 import type {
   AppointmentFull,
   AppointmentView,
   ChatTurn,
+  ClinicTaxSettings,
+  InvoiceView,
   PatientView,
   ServiceInput,
   WorkingHourInput,
 } from "@/lib/booking/types";
+import type { CreateInvoiceError } from "@/lib/booking/invoices";
 import type { Locale } from "@/lib/i18n";
 
 const MAX_TURNS = 50;
@@ -198,6 +210,94 @@ export async function getPatientsAction(): Promise<PatientView[]> {
   const ctx = await ensureClinicContext(owner);
   if (!ctx) return [];
   return getPatients(ctx.clinic.id, owner);
+}
+
+// ── ZATCA invoicing ──────────────────────────────────────────────────────────
+
+export async function getTaxSettingsAction(): Promise<ClinicTaxSettings | null> {
+  const owner = await getOwner();
+  if (!owner) return null;
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return null;
+  return getClinicTaxSettings(ctx.clinic.id, owner);
+}
+
+export async function saveTaxSettingsAction(data: {
+  legalName?: string;
+  vatNumber?: string;
+  vatRate?: number;
+}): Promise<{ ok: boolean }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false };
+  const vatRate =
+    typeof data.vatRate === "number" && data.vatRate >= 0 && data.vatRate <= 100
+      ? data.vatRate
+      : undefined;
+  const ok = await updateClinicTaxSettings(ctx.clinic.id, owner, {
+    legal_name: data.legalName?.trim() || null,
+    vat_number: data.vatNumber?.replace(/\s/g, "") || null,
+    vat_rate: vatRate,
+  });
+  return { ok };
+}
+
+export async function getInvoicesAction(): Promise<InvoiceView[]> {
+  const owner = await getOwner();
+  if (!owner) return [];
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return [];
+  return getInvoices(ctx.clinic.id, owner);
+}
+
+export async function createInvoiceAction(data: {
+  patientName?: string;
+  patientPhone?: string;
+  amount: number;
+  amountIncludesVat: boolean;
+  notes?: string;
+}): Promise<{ ok: boolean; invoice?: InvoiceView; error?: CreateInvoiceError }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, error: "no-db" };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false, error: "no-clinic" };
+  if (!Number.isFinite(data.amount) || data.amount <= 0) return { ok: false, error: "db-error" };
+  const res = await createInvoice({
+    clinicId: ctx.clinic.id,
+    owner,
+    patientName: data.patientName?.trim() || null,
+    patientPhone: data.patientPhone?.trim() || null,
+    amount: data.amount,
+    amountIncludesVat: data.amountIncludesVat,
+    notes: data.notes?.trim() || null,
+  });
+  return res.ok ? { ok: true, invoice: res.invoice } : { ok: false, error: res.error };
+}
+
+export async function cancelInvoiceAction(id: string): Promise<{ ok: boolean }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false };
+  const ok = await setInvoiceStatus(id, ctx.clinic.id, owner, "cancelled");
+  return { ok };
+}
+
+/** On-demand QR image (PNG data URL) for an invoice's ZATCA payload. */
+export async function getInvoiceQrAction(id: string): Promise<{ ok: boolean; dataUrl?: string }> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false };
+  const ctx = await ensureClinicContext(owner);
+  if (!ctx) return { ok: false };
+  const invoice = await getInvoiceById(id, ctx.clinic.id, owner);
+  if (!invoice) return { ok: false };
+  try {
+    const dataUrl = await QRCode.toDataURL(invoice.qrPayload, { margin: 1, width: 220 });
+    return { ok: true, dataUrl };
+  } catch {
+    return { ok: false };
+  }
 }
 
 // ── simulator ────────────────────────────────────────────────────────────────

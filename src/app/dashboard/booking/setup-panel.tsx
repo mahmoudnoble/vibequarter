@@ -9,8 +9,9 @@ import {
   saveServiceAction,
   deleteServiceAction,
   saveWorkingHoursAction,
+  saveTaxSettingsAction,
 } from "./booking-actions";
-import type { ServiceView, WorkingHourInput } from "@/lib/booking/types";
+import type { ClinicTaxSettings, ServiceView, WorkingHourInput } from "@/lib/booking/types";
 
 type ServiceDraft = {
   id?: string;
@@ -28,15 +29,39 @@ export function SetupPanel({
   waPnId: initWaPnId,
   services: initServices,
   workingHours: initHours,
+  taxSettings,
 }: {
   clinicId: string;
   clinicName: string;
   waPnId: string | null;
   services: ServiceView[];
   workingHours: WorkingHourInput[];
+  taxSettings: ClinicTaxSettings | null;
 }) {
   const { t, locale } = useLanguage();
   const st = t.dashboard.booking.setupTab;
+
+  // ── Tax / ZATCA ──────────────────────────────────────────────────────────
+  const [legalName, setLegalName] = useState(taxSettings?.legalName ?? "");
+  const [vatNumber, setVatNumber] = useState(taxSettings?.vatNumber ?? "");
+  const [vatRate, setVatRate] = useState(
+    taxSettings?.vatRate == null ? "15" : String(taxSettings.vatRate),
+  );
+  const [taxState, setTaxState] = useState<"idle" | "saving" | "saved">("idle");
+  const [, taxTransition] = useTransition();
+
+  function saveTax() {
+    setTaxState("saving");
+    taxTransition(async () => {
+      await saveTaxSettingsAction({
+        legalName: legalName.trim() || undefined,
+        vatNumber: vatNumber.trim() || undefined,
+        vatRate: vatRate === "" ? undefined : Number(vatRate),
+      });
+      setTaxState("saved");
+      setTimeout(() => setTaxState("idle"), 2500);
+    });
+  }
 
   // ── Clinic info ────────────────────────────────────────────────────────────
   const [name, setName] = useState(initName);
@@ -202,6 +227,70 @@ export function SetupPanel({
               : infoState === "saved"
                 ? st.savedInfo
                 : st.saveInfo}
+          </button>
+        </div>
+      </section>
+
+      {/* ── Tax / ZATCA ───────────────────────────────────────────────────── */}
+      <section>
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
+          <Icon name="ReceiptText" className="h-4 w-4 text-jade-600" />
+          {st.taxHeading}
+        </h2>
+        <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-foreground">
+              {st.legalNameLabel}
+            </label>
+            <input
+              value={legalName}
+              onChange={(e) => setLegalName(e.target.value)}
+              placeholder={st.legalNamePlaceholder}
+              className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-jade-500/50 focus:ring-2 focus:ring-jade-500/20"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground">
+                {st.vatNumberLabel}
+              </label>
+              <input
+                value={vatNumber}
+                onChange={(e) => setVatNumber(e.target.value.replace(/[^\d]/g, "").slice(0, 15))}
+                placeholder={st.vatNumberPlaceholder}
+                dir="ltr"
+                inputMode="numeric"
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-jade-500/50 focus:ring-2 focus:ring-jade-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground">
+                {st.vatRateLabel}
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={vatRate}
+                onChange={(e) => setVatRate(e.target.value)}
+                dir="ltr"
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-jade-500/50 focus:ring-2 focus:ring-jade-500/20"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">{st.taxHint}</p>
+          <button
+            type="button"
+            onClick={saveTax}
+            disabled={taxState === "saving"}
+            className={cn(
+              "cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
+              taxState === "saved"
+                ? "bg-jade-500/12 text-jade-700"
+                : "bg-jade-500 text-white hover:bg-jade-600 disabled:opacity-50",
+            )}
+          >
+            {taxState === "saving" ? st.savingTax : taxState === "saved" ? st.savedTax : st.saveTax}
           </button>
         </div>
       </section>

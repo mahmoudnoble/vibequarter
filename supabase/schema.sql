@@ -369,3 +369,43 @@ from public.appointments a
 where a.patient_phone is not null and a.patient_phone <> ''
 order by a.clinic_id, a.patient_phone, a.created_at desc
 on conflict (clinic_id, phone) do nothing;
+
+-- ----------------------------------------------------------------------------
+-- ZATCA invoicing (Phase 1: e-invoice generation). The clinic's tax identity
+-- lives on the clinic row (legal seller name, 15-digit VAT registration number,
+-- VAT rate). Each invoice stores its computed amounts + a base64 TLV QR payload
+-- (the ZATCA simplified-invoice QR: seller name, VAT number, timestamp, total
+-- incl. VAT, VAT total). Phase 2 (FATOORA XML/UBL + CSID clearance) is later.
+-- ----------------------------------------------------------------------------
+alter table public.clinics
+  add column if not exists legal_name text,
+  add column if not exists vat_number text,
+  add column if not exists vat_rate   numeric not null default 15;
+
+create table if not exists public.invoices (
+  id             uuid primary key default gen_random_uuid(),
+  clinic_id      uuid not null references public.clinics(id) on delete cascade,
+  owner_id       text not null check (owner_id <> ''),
+  appointment_id uuid references public.appointments(id) on delete set null,
+  seq            int  not null,                 -- per-clinic sequential number
+  invoice_number text not null,                 -- display form, e.g. INV-000001
+  patient_name   text,
+  patient_phone  text,
+  issued_at      timestamptz not null default now(),
+  currency       text not null default 'SAR',
+  subtotal       numeric not null,              -- net (pre-VAT)
+  vat_rate       numeric not null,
+  vat_amount     numeric not null,
+  total          numeric not null,              -- gross (incl. VAT)
+  qr_payload     text not null,                 -- base64 TLV (ZATCA QR data)
+  status         text not null default 'issued' check (status in ('issued','cancelled')),
+  notes          text,
+  created_at     timestamptz not null default now(),
+  unique (clinic_id, seq)
+);
+create index if not exists invoices_clinic_idx on public.invoices (clinic_id, issued_at desc);
+
+alter table public.invoices enable row level security;
+
+create policy "owner reads its invoices"  on public.invoices for select using (owner_id = public.current_tenant());
+create policy "owner writes its invoices" on public.invoices for all    using (owner_id = public.current_tenant()) with check (owner_id = public.current_tenant());

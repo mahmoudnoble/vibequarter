@@ -12,6 +12,53 @@ export type ClinicRow = {
   timezone: string;
   booking_window_days: number;
   whatsapp_phone_number_id?: string | null;
+  // ZATCA tax identity — read only by the invoice/settings flow (NOT loaded in
+  // the hot booking path), so the core agent never depends on these columns.
+  legal_name?: string | null;
+  vat_number?: string | null;
+  vat_rate?: number | null;
+};
+
+/** Clinic tax identity for ZATCA invoices (legal seller name + VAT reg + rate). */
+export type ClinicTaxSettings = {
+  legalName: string | null;
+  vatNumber: string | null;
+  vatRate: number;
+};
+
+/** Invoice row mirroring public.invoices. */
+export type InvoiceRow = {
+  id: string;
+  seq: number;
+  invoice_number: string;
+  appointment_id: string | null;
+  patient_name: string | null;
+  patient_phone: string | null;
+  issued_at: string;
+  currency: string;
+  subtotal: number;
+  vat_rate: number;
+  vat_amount: number;
+  total: number;
+  qr_payload: string;
+  status: "issued" | "cancelled";
+  notes: string | null;
+};
+
+/** Client-safe invoice shape for the dashboard. */
+export type InvoiceView = {
+  id: string;
+  invoiceNumber: string;
+  patientName: string | null;
+  patientPhone: string | null;
+  issuedAt: string;
+  currency: string;
+  subtotal: number;
+  vatRate: number;
+  vatAmount: number;
+  total: number;
+  qrPayload: string;
+  status: "issued" | "cancelled";
 };
 
 export type ServiceRow = {

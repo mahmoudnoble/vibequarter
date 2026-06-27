@@ -7,20 +7,24 @@ import { useLanguage } from "@/components/i18n/language-provider";
 import { SetupPanel } from "./setup-panel";
 import { AppointmentsPanel } from "./appointments-panel";
 import { PatientsPanel } from "./patients-panel";
+import { InvoicesPanel } from "./invoices-panel";
 import { SimulatorPanel } from "./simulator-panel";
 import type {
   AppointmentFull,
+  ClinicTaxSettings,
+  InvoiceView,
   PatientView,
   ServiceView,
   WorkingHourInput,
 } from "@/lib/booking/types";
 
-type Tab = "setup" | "appointments" | "patients" | "simulator";
+type Tab = "setup" | "appointments" | "patients" | "invoices" | "simulator";
 
 const TAB_ICONS: Record<Tab, string> = {
   setup: "Settings2",
   appointments: "CalendarDays",
   patients: "Users",
+  invoices: "ReceiptText",
   simulator: "Bot",
 };
 
@@ -33,6 +37,8 @@ export function BookingStudio({
   workingHours,
   initialAppointments,
   initialPatients,
+  initialInvoices,
+  taxSettings,
 }: {
   clinicId: string;
   clinicName: string;
@@ -42,6 +48,8 @@ export function BookingStudio({
   workingHours: WorkingHourInput[];
   initialAppointments: AppointmentFull[];
   initialPatients: PatientView[];
+  initialInvoices: InvoiceView[];
+  taxSettings: ClinicTaxSettings | null;
 }) {
   const { t } = useLanguage();
   const tb = t.dashboard.booking;
@@ -54,6 +62,7 @@ export function BookingStudio({
     setup: tabs.setup,
     appointments: tabs.appointments,
     patients: tabs.patients,
+    invoices: tabs.invoices,
     simulator: tabs.simulator,
   };
 
@@ -69,7 +78,7 @@ export function BookingStudio({
         className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1"
         role="tablist"
       >
-        {(["setup", "appointments", "patients", "simulator"] as Tab[]).map((tab) => (
+        {(["setup", "appointments", "patients", "invoices", "simulator"] as Tab[]).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -102,6 +111,7 @@ export function BookingStudio({
           waPnId={waPnId}
           services={services}
           workingHours={workingHours}
+          taxSettings={taxSettings}
         />
       )}
 
@@ -110,6 +120,10 @@ export function BookingStudio({
       )}
 
       {activeTab === "patients" && <PatientsPanel patients={initialPatients} />}
+
+      {activeTab === "invoices" && (
+        <InvoicesPanel initialInvoices={initialInvoices} taxSettings={taxSettings} />
+      )}
 
       {activeTab === "simulator" && (
         <SimulatorPanel

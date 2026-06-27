@@ -10,6 +10,12 @@ import { Icon } from "@/components/ui/icon";
  * can't miss it. For clean sign-ups with no challenge, the callback just
  * forwards to /dashboard.
  */
+// Clerk components require <ClerkProvider>, which the root layout only mounts
+// when Clerk keys are present. Mirror that gate here so an env-less build (no
+// keys) doesn't crash prerendering this page. In production the key is set, so
+// the callback renders exactly as before.
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
 export default function SSOCallbackPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-16">
@@ -23,7 +29,9 @@ export default function SSOCallbackPage() {
         {/* The CAPTCHA mounts here — on its own, no other fields around it. */}
         <div id="clerk-captcha" data-cl-size="flexible" data-cl-theme="light" className="mt-6 flex min-h-[72px] items-center justify-center" />
 
-        <AuthenticateWithRedirectCallback signUpForceRedirectUrl="/dashboard" signInForceRedirectUrl="/dashboard" />
+        {clerkEnabled && (
+          <AuthenticateWithRedirectCallback signUpForceRedirectUrl="/dashboard" signInForceRedirectUrl="/dashboard" />
+        )}
       </div>
     </main>
   );
