@@ -50,7 +50,7 @@ export function zonedWallToUtc(
 }
 
 /** Clinic-local calendar date for a UTC instant. */
-function localYmd(at: Date, timeZone: string): { y: number; mo: number; d: number } {
+export function localYmd(at: Date, timeZone: string): { y: number; mo: number; d: number } {
   const dtf = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -63,7 +63,7 @@ function localYmd(at: Date, timeZone: string): { y: number; mo: number; d: numbe
 }
 
 /** Minutes since clinic-local midnight for a UTC instant. */
-function localMinutes(at: Date, timeZone: string): number {
+export function localMinutes(at: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone,
     hour12: false,
@@ -78,11 +78,11 @@ function localMinutes(at: Date, timeZone: string): number {
 }
 
 /** Day-of-week (0=Sun..6=Sat) for a clinic-local calendar date. */
-function weekdayOf(y: number, mo: number, d: number): number {
+export function weekdayOf(y: number, mo: number, d: number): number {
   return new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
 }
 
-function parseHm(t: string): number {
+export function parseHm(t: string): number {
   const [h, m] = t.split(":");
   return +h * 60 + +m;
 }
