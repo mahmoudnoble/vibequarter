@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { ensureClinicContext } from "@/lib/booking/clinic";
 import { runBookingAgent } from "@/lib/booking/agent";
+import { localYmd, localMinutes, weekdayOf, parseHm } from "@/lib/booking/availability";
+import { recordUsage } from "@/lib/usage-events";
 import type { ChatTurn } from "@/lib/booking/types";
 
 // INSTANT acknowledgement — deterministic, ZERO model latency. Picks a natural
@@ -79,12 +81,25 @@ export async function POST(req: Request) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  let payload: { messages?: OpenAiMessage[]; call?: { customer?: { number?: string } }; customer?: { number?: string } };
+  let payload: {
+    messages?: OpenAiMessage[];
+    call?: { customer?: { number?: string }; assistantId?: string; phoneNumberId?: string };
+    customer?: { number?: string };
+    assistant?: { id?: string };
+    phoneNumber?: { id?: string };
+  };
   try {
     payload = await req.json();
   } catch {
     return openAiError("invalid JSON body");
   }
+
+  // Which clinic answers this call — by the Vapi assistant/number the call came
+  // in on (multi-clinic), else the pilot escape hatch / single clinic.
+  const vapiIds = {
+    assistantId: payload.call?.assistantId ?? payload.assistant?.id,
+    phoneNumberId: payload.call?.phoneNumberId ?? payload.phoneNumber?.id,
+  };
 
   // Map Vapi's OpenAI transcript → our ChatTurn[] (drop Vapi's own system/tool msgs).
   const turns: ChatTurn[] = (payload.messages ?? [])
@@ -110,8 +125,11 @@ export async function POST(req: Request) {
   if (turns.length === 0) {
     let c: Awaited<ReturnType<typeof ensureClinicContext>> = null;
     try {
-      const o = await resolveVoiceOwner();
-      c = o ? await ensureClinicContext(o) : null;
+      const r = await resolveVoiceClinic(vapiIds);
+      if (!r.ok) return streamCompletion(voiceRejection(r.reason));
+      c = await ensureClinicContext(r.owner);
+      // Call-open = one inbound call. Record it (best-effort) for usage metrics.
+      await recordUsage("call", r.owner, c?.clinic.id);
     } catch (e) {
       console.error("[voice] greet resolve failed:", e);
     }
@@ -157,9 +175,14 @@ export async function POST(req: Request) {
         if (filler) enqueue(filler + " ");
 
         // 2) Resolve the clinic (DB) WHILE the filler audio plays — no lag.
-        const owner = await resolveVoiceOwner();
-        const ctx = owner ? await ensureClinicContext(owner) : null;
-        if (!owner || !ctx) {
+        const r = await resolveVoiceClinic(vapiIds);
+        if (!r.ok) {
+          enqueue(voiceRejection(r.reason));
+          return;
+        }
+        const owner = r.owner;
+        const ctx = await ensureClinicContext(owner);
+        if (!ctx) {
           console.warn("[voice] no clinic resolved");
           enqueue("عذراً، الخدمة غير متاحة حالياً، حاول لاحقاً.");
           return;
@@ -219,22 +242,79 @@ export async function POST(req: Request) {
   });
 }
 
+type VoiceResolve = { ok: true; owner: string } | { ok: false; reason: "none" | "scope" | "hours" };
+
+/** Spoken line when a call can't be served. */
+function voiceRejection(reason: "none" | "scope" | "hours"): string {
+  if (reason === "scope") return "عذراً، خدمة المكالمات غير مفعّلة لهذه العيادة. تقدر تراسلنا على واتساب.";
+  if (reason === "hours") return "نعتذر، إحنا مقفولين حالياً. راسلنا على واتساب وهنرد عليك في أقرب وقت.";
+  return "عذراً، الخدمة غير متاحة حالياً، حاول لاحقاً.";
+}
+
 // ---------------------------------------------------------------------------
-// Resolve which clinic answers. Pilot: a single demo clinic (the one already
-// wired for WhatsApp). Override with VOICE_SANDBOX_OWNER_ID; multi-clinic later
-// maps the Vapi number/assistant → clinic.
+// Resolve which clinic answers the call:
+//  1) VOICE_SANDBOX_OWNER_ID → that clinic, no gates (pilot escape hatch).
+//  2) Vapi assistant/number → the mapped clinic, gated by scope (must include
+//     calls) + the agent answer-hours.
+//  3) Else the single WhatsApp-enabled clinic (legacy pilot) — no gates.
 // ---------------------------------------------------------------------------
-async function resolveVoiceOwner(): Promise<string | null> {
-  if (process.env.VOICE_SANDBOX_OWNER_ID) return process.env.VOICE_SANDBOX_OWNER_ID;
+async function resolveVoiceClinic(ids: { assistantId?: string; phoneNumberId?: string }): Promise<VoiceResolve> {
+  if (process.env.VOICE_SANDBOX_OWNER_ID) return { ok: true, owner: process.env.VOICE_SANDBOX_OWNER_ID };
   const db = getSupabaseServiceClient();
-  if (!db) return null;
+  if (!db) return { ok: false, reason: "none" };
+
+  // Sanitize ids (they come from the Vapi payload) before using in a filter.
+  const safe = (s?: string) => (s ? s.replace(/[^A-Za-z0-9_-]/g, "") : "");
+  const assistantId = safe(ids.assistantId);
+  const phoneNumberId = safe(ids.phoneNumberId);
+
+  if (assistantId || phoneNumberId) {
+    const ors: string[] = [];
+    if (assistantId) ors.push(`vapi_assistant_id.eq.${assistantId}`);
+    if (phoneNumberId) ors.push(`vapi_phone_number_id.eq.${phoneNumberId}`);
+    const { data } = await db
+      .from("clinics")
+      .select("id, owner_id, scope, timezone")
+      .or(ors.join(","))
+      .limit(1)
+      .maybeSingle();
+    const clinic = data as { id: string; owner_id: string; scope: string; timezone: string } | null;
+    if (clinic) {
+      if (clinic.scope !== "whatsapp_calls") return { ok: false, reason: "scope" };
+      if (!(await withinAgentHours(clinic.id, clinic.timezone || "Asia/Riyadh"))) {
+        return { ok: false, reason: "hours" };
+      }
+      return { ok: true, owner: clinic.owner_id };
+    }
+    // No mapping matched → fall through to the legacy single-clinic fallback.
+  }
+
   const { data } = await db
     .from("clinics")
     .select("owner_id")
     .not("whatsapp_phone_number_id", "is", null)
     .limit(1)
     .maybeSingle();
-  return (data as { owner_id?: string } | null)?.owner_id ?? null;
+  const owner = (data as { owner_id?: string } | null)?.owner_id;
+  return owner ? { ok: true, owner } : { ok: false, reason: "none" };
+}
+
+/** True if the agent should answer calls now: no agent_hours configured ⇒ always
+ *  on (pilot-safe); otherwise clinic-local now must fall inside a configured range. */
+async function withinAgentHours(clinicId: string, tz: string): Promise<boolean> {
+  const db = getSupabaseServiceClient();
+  if (!db) return true;
+  const { data } = await db
+    .from("agent_hours")
+    .select("weekday, open_time, close_time")
+    .eq("clinic_id", clinicId);
+  const rows = (data ?? []) as Array<{ weekday: number; open_time: string; close_time: string }>;
+  if (rows.length === 0) return true;
+  const now = new Date();
+  const { y, mo, d } = localYmd(now, tz);
+  const weekday = weekdayOf(y, mo, d);
+  const nowMin = localMinutes(now, tz);
+  return rows.some((r) => r.weekday === weekday && nowMin >= parseHm(r.open_time) && nowMin < parseHm(r.close_time));
 }
 
 function textOf(content: unknown): string {

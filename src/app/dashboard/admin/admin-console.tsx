@@ -12,7 +12,7 @@ const STR = {
     title: "Clinics", subtitle: "Manage every clinic and watch usage across the platform.",
     newClinic: "New clinic", empty: "No clinics yet. Create your first one.",
     clinic: "Clinic", bookings: "Bookings", completed: "Completed", invoices: "Invoices",
-    revenue: "Revenue", patients: "Patients", convos: "Chats", status: "Status",
+    revenue: "Revenue", patients: "Patients", convos: "Chats", callsCol: "Calls", status: "Status",
     active: "Active", paused: "Paused", whatsapp: "WhatsApp", calls: "WhatsApp + Calls",
     create: "Create clinic", creating: "Creating…", cancel: "Cancel",
     nameLabel: "Clinic name", phoneLabel: "WhatsApp Phone Number ID",
@@ -27,7 +27,7 @@ const STR = {
     title: "العيادات", subtitle: "أدر كل العيادات وتابع الاستهلاك عبر المنصة.",
     newClinic: "عيادة جديدة", empty: "لا عيادات بعد. أنشئ أول عيادة.",
     clinic: "العيادة", bookings: "الحجوزات", completed: "مكتملة", invoices: "الفواتير",
-    revenue: "الإيراد", patients: "المرضى", convos: "محادثات", status: "الحالة",
+    revenue: "الإيراد", patients: "المرضى", convos: "محادثات", callsCol: "مكالمات", status: "الحالة",
     active: "نشطة", paused: "موقوفة", whatsapp: "واتساب", calls: "واتساب + مكالمات",
     create: "إنشاء العيادة", creating: "جاري الإنشاء…", cancel: "إلغاء",
     nameLabel: "اسم العيادة", phoneLabel: "معرّف رقم واتساب",
@@ -84,6 +84,7 @@ export function AdminConsole({ clinics: initial }: { clinics: ClinicUsage[] }) {
                 <th className="px-3 py-3 text-center font-semibold">{L.revenue}</th>
                 <th className="px-3 py-3 text-center font-semibold">{L.patients}</th>
                 <th className="px-3 py-3 text-center font-semibold">{L.convos}</th>
+                <th className="px-3 py-3 text-center font-semibold">{L.callsCol}</th>
                 <th className="px-4 py-3 text-center font-semibold">{L.status}</th>
               </tr>
             </thead>
@@ -102,6 +103,7 @@ export function AdminConsole({ clinics: initial }: { clinics: ClinicUsage[] }) {
                   <td className="px-3 py-3 text-center font-semibold text-jade-700">{money(c.revenue)}</td>
                   <td className="px-3 py-3 text-center text-foreground">{c.patientsCount}</td>
                   <td className="px-3 py-3 text-center text-foreground">{c.conversations}</td>
+                  <td className="px-3 py-3 text-center text-foreground">{c.calls}</td>
                   <td className="px-4 py-3 text-center">
                     <span
                       className={cn(
